@@ -1,0 +1,44 @@
+<svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g1" x1="90" y1="74" x2="1112" y2="448" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F766E"/>
+      <stop offset="1" stop-color="#14B8A6"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0 0L12 6L0 12V0Z" fill="#0F766E"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="520" rx="28" fill="#F8FAFC"/>
+  <text x="84" y="74" fill="#0F172A" font-size="42" font-family="Arial, sans-serif" font-weight="700">Architecture</text>
+  <text x="84" y="108" fill="#475569" font-size="22" font-family="Arial, sans-serif">How the extension, backend and translation engine work together</text>
+
+  <rect x="84" y="160" width="250" height="220" rx="24" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="116" y="214" fill="#0F172A" font-size="30" font-family="Arial, sans-serif" font-weight="700">Chrome extension</text>
+  <text x="116" y="260" fill="#475569" font-size="20" font-family="Arial, sans-serif">content.js</text>
+  <text x="116" y="292" fill="#475569" font-size="20" font-family="Arial, sans-serif">background.js</text>
+  <text x="116" y="324" fill="#475569" font-size="20" font-family="Arial, sans-serif">popup.html / popup.js</text>
+
+  <rect x="474" y="140" width="280" height="260" rx="24" fill="url(#g1)"/>
+  <text x="516" y="204" fill="white" font-size="32" font-family="Arial, sans-serif" font-weight="700">FastAPI backend</text>
+  <text x="516" y="252" fill="#CCFBF1" font-size="20" font-family="Arial, sans-serif">/api/reading/scan</text>
+  <text x="516" y="286" fill="#CCFBF1" font-size="20" font-family="Arial, sans-serif">/api/reading/lookup</text>
+  <text x="516" y="320" fill="#CCFBF1" font-size="20" font-family="Arial, sans-serif">/api/test/* / /api/review/*</text>
+  <text x="516" y="354" fill="#CCFBF1" font-size="20" font-family="Arial, sans-serif">SQLite local profile</text>
+
+  <rect x="894" y="160" width="222" height="100" rx="24" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="926" y="214" fill="#0F172A" font-size="28" font-family="Arial, sans-serif" font-weight="700">Local dictionary</text>
+  <text x="926" y="246" fill="#475569" font-size="18" font-family="Arial, sans-serif">IELTS + optional ECDICT</text>
+
+  <rect x="894" y="282" width="222" height="100" rx="24" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="926" y="336" fill="#0F172A" font-size="28" font-family="Arial, sans-serif" font-weight="700">Your LLM</text>
+  <text x="926" y="368" fill="#475569" font-size="18" font-family="Arial, sans-serif">BYOK API URL / model / key</text>
+
+  <line x1="334" y1="270" x2="460" y2="270" stroke="#0F766E" stroke-width="6" marker-end="url(#arrow)"/>
+  <line x1="754" y1="220" x2="880" y2="220" stroke="#0F766E" stroke-width="6" marker-end="url(#arrow)"/>
+  <line x1="754" y1="332" x2="880" y2="332" stroke="#0F766E" stroke-width="6" marker-end="url(#arrow)"/>
+
+  <text x="348" y="246" fill="#0F766E" font-size="18" font-family="Arial, sans-serif">Scan words / render annotations</text>
+  <text x="770" y="196" fill="#0F766E" font-size="18" font-family="Arial, sans-serif">Fallback / instant lookup</text>
+  <text x="770" y="308" fill="#0F766E" font-size="18" font-family="Arial, sans-serif">Context-aware translation</text>
+</svg>

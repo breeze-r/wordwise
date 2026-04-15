@@ -1,0 +1,52 @@
+<svg width="1200" height="680" viewBox="0 0 1200 680" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="120" y1="40" x2="1040" y2="640" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E6FFFB"/>
+      <stop offset="1" stop-color="#F8FAFC"/>
+    </linearGradient>
+    <linearGradient id="hero" x1="160" y1="96" x2="966" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F766E"/>
+      <stop offset="1" stop-color="#14B8A6"/>
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="1200" height="680" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="14" stdDeviation="28" flood-color="#0F172A" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="680" rx="32" fill="url(#bg)"/>
+  <circle cx="1060" cy="120" r="160" fill="#CCFBF1"/>
+  <circle cx="150" cy="590" r="120" fill="#D1FAE5"/>
+
+  <g filter="url(#shadow)">
+    <rect x="84" y="76" width="1032" height="528" rx="28" fill="white"/>
+  </g>
+
+  <rect x="120" y="110" width="480" height="460" rx="24" fill="url(#hero)"/>
+  <text x="164" y="190" fill="white" font-size="54" font-family="Arial, sans-serif" font-weight="700">WordWise</text>
+  <text x="164" y="244" fill="#CCFBF1" font-size="28" font-family="Arial, sans-serif">Read English with live word annotations</text>
+  <text x="164" y="305" fill="white" font-size="24" font-family="Arial, sans-serif">Chrome extension + local FastAPI backend + BYOK LLM</text>
+
+  <rect x="164" y="356" width="382" height="72" rx="18" fill="rgba(255,255,255,0.16)"/>
+  <text x="194" y="401" fill="white" font-size="24" font-family="Arial, sans-serif">Auto annotate unfamiliar words</text>
+
+  <rect x="164" y="446" width="382" height="72" rx="18" fill="rgba(255,255,255,0.16)"/>
+  <text x="194" y="491" fill="white" font-size="24" font-family="Arial, sans-serif">Local dictionary or your own model key</text>
+
+  <rect x="648" y="126" width="412" height="278" rx="26" fill="#F8FAFC" stroke="#E2E8F0"/>
+  <rect x="674" y="156" width="360" height="32" rx="10" fill="#E2E8F0"/>
+  <rect x="674" y="208" width="290" height="22" rx="8" fill="#CBD5E1"/>
+  <rect x="674" y="248" width="334" height="22" rx="8" fill="#CBD5E1"/>
+  <text x="674" y="314" fill="#0F172A" font-size="30" font-family="Georgia, serif">ruthless</text>
+  <rect x="818" y="287" width="156" height="42" rx="21" fill="#CCFBF1"/>
+  <text x="843" y="315" fill="#0F766E" font-size="22" font-family="Arial, sans-serif">冷酷的</text>
+  <text x="674" y="368" fill="#475569" font-size="18" font-family="Arial, sans-serif">Click for UK/US pronunciation, English definitions,</text>
+  <text x="674" y="394" fill="#475569" font-size="18" font-family="Arial, sans-serif">and a sentence-level translation panel.</text>
+
+  <rect x="648" y="430" width="196" height="120" rx="24" fill="#ECFDF5" stroke="#BBF7D0"/>
+  <text x="676" y="476" fill="#166534" font-size="24" font-family="Arial, sans-serif" font-weight="700">Privacy-first</text>
+  <text x="676" y="512" fill="#166534" font-size="18" font-family="Arial, sans-serif">Keys stay in your browser.</text>
+
+  <rect x="864" y="430" width="196" height="120" rx="24" fill="#EFF6FF" stroke="#BFDBFE"/>
+  <text x="892" y="476" fill="#1D4ED8" font-size="24" font-family="Arial, sans-serif" font-weight="700">Open source</text>
+  <text x="892" y="512" fill="#1D4ED8" font-size="18" font-family="Arial, sans-serif">MIT licensed project.</text>
+</svg>

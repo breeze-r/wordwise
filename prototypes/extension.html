@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WordWise - UI Preview</title>
+<link rel="stylesheet" href="../extension/content.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "SF Pro Display", "Segoe UI", "PingFang SC", sans-serif;
+    background: #f1f5f9;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 60px;
+  }
+  .page-header {
+    background: #0f172a;
+    color: #fff;
+    text-align: center;
+    padding: 32px 24px 24px;
+  }
+  .page-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 4px; }
+  .page-header p { font-size: 13px; color: #94a3b8; }
+  .preview-grid {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 24px;
+    display: grid;
+    grid-template-columns: 400px 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .preview-grid { grid-template-columns: 1fr; }
+  }
+  .popup-column { display: flex; flex-direction: column; gap: 24px; position: sticky; top: 24px; }
+  .popup-frame {
+    border-radius: 16px; overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(15,23,42,0.06), 0 8px 24px rgba(15,23,42,0.1), 0 24px 60px rgba(15,23,42,0.08);
+    background: #fff;
+  }
+  .frame-label {
+    font-size: 11px; font-weight: 600; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px;
+  }
+  .article-wrap {
+    background: #fff; border-radius: 16px; padding: 48px;
+    box-shadow: 0 0 0 1px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.06);
+    line-height: 1.9; font-size: 17px; color: #1e293b;
+  }
+  .article-wrap h2 { font-size: 26px; font-weight: 700; color: #0f172a; letter-spacing: -0.5px; margin-bottom: 20px; line-height: 1.35; }
+  .article-wrap p { margin-bottom: 18px; }
+  .section-label {
+    font-size: 11px; font-weight: 600; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px;
+  }
+  .detail-preview-wrapper {
+    background: #f8fafc; border-radius: 16px; padding: 32px; margin-top: 24px; border: 1px solid #e2e8f0;
+  }
+  .detail-preview-wrapper #ww-detail {
+    display: block !important; position: relative !important; margin: 0 auto;
+  }
+  .proto-label {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: #0f172a; color: #94a3b8; padding: 8px 20px; border-radius: 999px;
+    font-size: 12px; z-index: 9999; box-shadow: 0 4px 16px rgba(15,23,42,0.2);
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>WordWise UI Preview</h1>
+  <p>Popup + Content Annotation Styles</p>
+</div>
+
+<div class="preview-grid">
+  <!-- Left: Popup previews -->
+  <div class="popup-column">
+    <div>
+      <div class="frame-label">Popup - Dashboard</div>
+      <div class="popup-frame" id="popupDashboard"></div>
+    </div>
+    <div>
+      <div class="frame-label">Popup - Login</div>
+      <div class="popup-frame" id="popupLogin"></div>
+    </div>
+  </div>
+
+  <!-- Right: Article content annotations -->
+  <div>
+    <div class="section-label">Page Annotations</div>
+    <div class="article-wrap">
+      <h2>The Rise of Quantum Computing and Its Implications for Modern Cryptography</h2>
+      <p>
+        Quantum computing represents a
+        paradigm <span class="ww-cn">(范式)</span>
+        shift in how we process information.
+        Unlike classical computers that use bits, quantum computers use
+        qubits <span class="ww-cn">(量子比特)</span>,
+        which can exist in multiple states
+        simultaneously <span class="ww-cn">(同时地)</span>.
+        This property, known as
+        superposition <span class="ww-cn">(叠加态)</span>,
+        allows quantum computers to perform certain calculations exponentially faster than their classical
+        counterparts <span class="ww-cn">(对应物)</span>.
+      </p>
+      <p>
+        No matter <span class="ww-cn">(无论)</span>
+        what challenges arise, researchers remain
+        resilient <span class="ww-cn">(有韧性的)</span>
+        in their pursuit of progress. The implications for
+        cryptography <span class="ww-cn">(密码学)</span>
+        are
+        profound <span class="ww-cn">(深远的)</span>.
+        Current encryption methods rely on the computational difficulty of factoring large numbers.
+        A sufficiently powerful quantum computer could
+        undermine <span class="ww-cn">(削弱)</span>
+        these protections, potentially rendering much of today's encrypted data
+        vulnerable <span class="ww-cn">(脆弱的)</span>.
+      </p>
+      <p>
+        In spite of <span class="ww-cn">(尽管)</span>
+        these concerns, the scientific community remains optimistic. Researchers are developing
+        comprehensive <span class="ww-cn">(全面的)</span>
+        post-quantum algorithms. The transition will require a
+        meticulous <span class="ww-cn">(一丝不苟的)</span>
+        overhaul of our digital security infrastructure, but the
+        endeavor <span class="ww-cn">(努力)</span>
+        is well worth pursuing.
+      </p>
+    </div>
+
+    <!-- Summary sidebar preview -->
+    <div class="detail-preview-wrapper" style="margin-top:24px">
+      <div class="section-label">Article Summary Sidebar</div>
+      <div id="ww-summary" class="ww-show" style="position:relative;top:0;right:0;opacity:1;transform:none;pointer-events:auto;max-height:none;">
+        <div class="ww-sum-header">
+          <div class="ww-sum-brand">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            <span class="ww-sum-brand-text">Overview</span>
+          </div>
+          <div class="ww-sum-actions">
+            <button class="ww-sum-lang-btn active">中</button>
+            <button class="ww-sum-lang-btn">EN</button>
+            <button class="ww-sum-lang-btn">双</button>
+            <button class="ww-sum-close">✕</button>
+          </div>
+        </div>
+        <div class="ww-sum-body">
+          <div class="ww-sum-title">量子计算对现代密码学的深远影响</div>
+          <div class="ww-sum-overview">量子计算利用叠加态和量子比特实现指数级计算加速，对现行加密体系构成根本性威胁，推动后量子密码学研究快速发展。</div>
+          <div class="ww-sum-section">
+            <div class="ww-sum-section-head">
+              <span class="ww-sum-section-dot"></span>
+              <span class="ww-sum-section-title">量子计算基本原理</span>
+            </div>
+            <div class="ww-sum-points">
+              <div class="ww-sum-point">量子计算机使用量子比特取代传统比特</div>
+              <div class="ww-sum-point">叠加态使量子计算机可同时存在于多种状态</div>
+              <div class="ww-sum-point">某些计算速度呈指数级提升</div>
+            </div>
+          </div>
+          <div class="ww-sum-section">
+            <div class="ww-sum-section-head">
+              <span class="ww-sum-section-dot"></span>
+              <span class="ww-sum-section-title">对密码学的冲击</span>
+            </div>
+            <div class="ww-sum-points">
+              <div class="ww-sum-point">现有加密依赖大数分解的计算难度</div>
+              <div class="ww-sum-point">量子计算可能使当前加密数据变得脆弱</div>
+            </div>
+          </div>
+          <div class="ww-sum-section">
+            <div class="ww-sum-section-head">
+              <span class="ww-sum-section-dot"></span>
+              <span class="ww-sum-section-title">后量子密码学应对</span>
+            </div>
+            <div class="ww-sum-points">
+              <div class="ww-sum-point">科研人员正在开发抗量子攻击算法</div>
+              <div class="ww-sum-point">数字安全基础设施需要全面升级改造</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail panel preview -->
+    <div class="detail-preview-wrapper">
+      <div class="section-label">Detail Panel</div>
+      <div id="ww-detail">
+        <div class="ww-dt-header">
+          <span class="ww-dt-word">paradigm</span>
+          <span class="ww-dt-pos">noun</span>
+        </div>
+        <div class="ww-dt-phonetics">
+          <span class="ww-dt-pn-group">
+            <button class="ww-dt-speak" title="UK">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+            </button>
+            <span class="ww-dt-pn-label">UK</span>
+            /ˈpærədaɪm/
+          </span>
+          <span class="ww-dt-pn-sep">|</span>
+          <span class="ww-dt-pn-group">
+            <button class="ww-dt-speak" title="US">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+            </button>
+            <span class="ww-dt-pn-label">US</span>
+            /ˈpærədaɪm/
+          </span>
+        </div>
+        <div class="ww-dt-meaning">范式，典范</div>
+        <div class="ww-dt-meanings">
+          <div class="ww-dt-meaning-item">范式，模型</div>
+          <div class="ww-dt-meaning-item">典范，榜样</div>
+          <div class="ww-dt-meaning-item">词形变化表</div>
+        </div>
+        <div class="ww-dt-en-defs">
+          <div class="ww-dt-en-label">English</div>
+          <div class="ww-dt-en-item">A typical example or pattern of something; a model</div>
+          <div class="ww-dt-en-item">A worldview underlying the theories of a particular period</div>
+        </div>
+        <div class="ww-dt-context">
+          Quantum computing represents a <mark>paradigm</mark> shift in how we process information.
+        </div>
+        <div class="ww-dt-meta">首次遇到 2 分钟前</div>
+        <div class="ww-dt-actions">
+          <button class="ww-btn-add">+ 加入生词本</button>
+          <button class="ww-btn-know">认识</button>
+          <button class="ww-btn-ignore">忽略</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="proto-label">WordWise UI Preview v0.1.0</div>
+
+<script>
+// Load the popup HTML and render it inline (since iframes with srcdoc have path issues)
+fetch('../extension/popup.html')
+  .then(r => r.text())
+  .then(html => {
+    // Extract the <style> and <body> content from popup.html
+    const styleMatch = html.match(/<style>([\s\S]*?)<\/style>/);
+    const styleContent = styleMatch ? styleMatch[1] : '';
+
+    // ── Dashboard Mock ──
+    const dashEl = document.getElementById('popupDashboard');
+    const dashShadow = dashEl.attachShadow({ mode: 'open' });
+
+    const dashStyle = document.createElement('style');
+    dashStyle.textContent = styleContent;
+    dashShadow.appendChild(dashStyle);
+
+    // SVG icon definitions
+    const IC = {
+      brand: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/><path d="M17 8l2 2" opacity=".6"/><circle cx="18.5" cy="6.5" r="1" fill="#fff" stroke="none" opacity=".6"/></svg>',
+      target: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+      box: '<svg viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+      sparkle: '<svg viewBox="0 0 24 24"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M19 13l.75 2.25L22 16l-2.25.75L19 19l-.75-2.25L16 16l2.25-.75L19 13z" opacity=".6"/></svg>',
+      book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>',
+      grad: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.1 2.7 3 6 3s6-1.9 6-3v-5"/></svg>',
+      heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/></svg>',
+      code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+      brief: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+      scale: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="3" x2="12" y2="21"/><path d="M5 12H2l3.5-7L9 12H5z"/><path d="M19 12h-3l3.5-7L23 12h-4z"/><line x1="8" y1="21" x2="16" y2="21"/></svg>',
+    };
+
+    const dashBody = document.createElement('div');
+    dashBody.style.width = '380px';
+    dashBody.innerHTML = `
+      <div class="dashboard" id="dashboardView" style="display:block">
+        <div class="header">
+          <div class="header-top">
+            <div class="brand">
+              <div class="brand-icon">${IC.brand}</div>
+              <div><h1>WordWise</h1><p>Read to Learn English</p></div>
+            </div>
+            <div class="header-actions">
+              <button class="logout-btn">退出</button>
+              <span class="user-email">demo@wordwise.app</span>
+            </div>
+          </div>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="num" style="color:#0d9488">4,200</div><div class="label">词汇量</div></div>
+          <div class="stat"><div class="num">47</div><div class="label">生词</div></div>
+          <div class="stat"><div class="num">126</div><div class="label">学习中</div></div>
+          <div class="stat"><div class="num">892</div><div class="label">已掌握</div></div>
+        </div>
+        <div class="llm-status active ok" style="display:flex; margin-top:12px;">
+          <span class="llm-dot ok"></span>
+          <span class="llm-status-text">AI 翻译服务正常运行中</span>
+        </div>
+        <div class="toggle-section">
+          <span class="toggle-label">插件启用</span>
+          <div class="toggle on"></div>
+        </div>
+        <div class="section">
+          <div class="section-header">
+            <span class="section-icon">${IC.target}</span>
+            <span class="section-title">我的英语水平</span>
+          </div>
+          <p class="section-desc">选择当前水平，该等级以下词汇不再标注</p>
+          <div class="chip-grid">
+            <span class="chip">初中<span class="chip-count">1,600</span></span>
+            <span class="chip">高中<span class="chip-count">3,500</span></span>
+            <span class="chip active">四级<span class="chip-count">4,200</span></span>
+            <span class="chip">六级<span class="chip-count">5,500</span></span>
+            <span class="chip">雅思<span class="chip-count">7,000</span></span>
+            <span class="chip">GRE<span class="chip-count">12,000</span></span>
+          </div>
+          <div class="section-status" style="color:#4caf50">已切换到「四级」，4,200词以下不再标注</div>
+        </div>
+        <div class="section">
+          <div class="section-header">
+            <span class="section-icon">${IC.box}</span>
+            <span class="section-title">专业词典包</span>
+          </div>
+          <p class="section-desc">启用后，该领域的生僻词汇也会被标注翻译</p>
+          <div class="chip-grid">
+            <span class="pack-chip active"><span class="pack-icon">${IC.book}</span>GRE 核心<span class="pack-count">470</span></span>
+            <span class="pack-chip"><span class="pack-icon">${IC.grad}</span>TOEFL<span class="pack-count">316</span></span>
+            <span class="pack-chip"><span class="pack-icon">${IC.heart}</span>医学<span class="pack-count">189</span></span>
+            <span class="pack-chip active"><span class="pack-icon">${IC.code}</span>科技<span class="pack-count">134</span></span>
+            <span class="pack-chip"><span class="pack-icon">${IC.brief}</span>商务<span class="pack-count">129</span></span>
+            <span class="pack-chip"><span class="pack-icon">${IC.scale}</span>法律<span class="pack-count">111</span></span>
+          </div>
+          <div class="section-status" style="color:#4caf50">已启用：GRE 核心、科技</div>
+        </div>
+        <div class="settings-section">
+          <div class="section-header">
+            <span class="section-icon">${IC.sparkle}</span>
+            <span class="section-title">AI 翻译引擎</span>
+          </div>
+          <p class="section-desc">API Key 仅保存在浏览器本地，仅在翻译请求时使用</p>
+          <div class="settings-grid">
+            <div>
+              <label>翻译模式</label>
+              <select><option selected>本地优先 + AI 补全</option></select>
+            </div>
+            <div>
+              <label>API 地址</label>
+              <input type="text" value="https://api.example.com/v1/chat/completions" />
+            </div>
+            <div>
+              <label>模型名称</label>
+              <input type="text" value="gpt-4o-mini" />
+            </div>
+            <div>
+              <label>API Key</label>
+              <input type="password" value="sk-demo1234567890" />
+            </div>
+          </div>
+          <div class="settings-actions">
+            <div class="settings-status">已保存，新的阅读请求会使用这组配置。</div>
+            <button class="btn btn-primary btn-small">保存</button>
+          </div>
+          <p class="hint">选择「仅本地词典」模式无需填写 Key，即可使用基础翻译功能。</p>
+        </div>
+        <div class="footer">WordWise v0.1.0</div>
+      </div>
+    `;
+    dashShadow.appendChild(dashBody);
+
+    // ── Login Mock ──
+    const loginEl = document.getElementById('popupLogin');
+    const loginShadow = loginEl.attachShadow({ mode: 'open' });
+
+    const loginStyle = document.createElement('style');
+    loginStyle.textContent = styleContent;
+    loginShadow.appendChild(loginStyle);
+
+    const loginBody = document.createElement('div');
+    loginBody.style.width = '380px';
+    loginBody.innerHTML = `
+      <div class="login-view" style="display:block">
+        <div class="header" style="margin: -28px -24px 24px; padding: 20px 24px 18px;">
+          <div class="brand">
+            <div class="brand-icon">${IC.brand}</div>
+            <div><h1>WordWise</h1><p>Read to Learn English</p></div>
+          </div>
+        </div>
+        <h2>Welcome back</h2>
+        <p class="login-subtitle">登录你的账号以同步学习进度</p>
+        <div class="form-group"><input type="email" placeholder="邮箱地址" /></div>
+        <div class="form-group"><input type="password" placeholder="密码" /></div>
+        <div class="form-btns">
+          <button class="btn btn-primary">登录</button>
+          <button class="btn btn-secondary">注册</button>
+        </div>
+      </div>
+    `;
+    loginShadow.appendChild(loginBody);
+  });
+</script>
+</body>
+</html>

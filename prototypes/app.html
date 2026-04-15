@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=375, initial-scale=1.0">
+<title>WordWise - App 原型</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #f5f5f5; display: flex; justify-content: center; padding: 20px; }
+
+  .phone {
+    width: 375px; height: 812px; background: #fff; border-radius: 40px;
+    overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,.15);
+    position: relative; border: 8px solid #1a1a2e;
+  }
+  .notch {
+    width: 150px; height: 28px; background: #1a1a2e; border-radius: 0 0 16px 16px;
+    margin: 0 auto; position: relative; z-index: 10;
+  }
+  .screen { height: calc(100% - 28px); overflow: hidden; position: relative; }
+
+  /* === 页面切换 === */
+  .page { display: none; height: 100%; overflow-y: auto; padding-bottom: 70px; }
+  .page.active { display: block; }
+
+  /* === Tab Bar === */
+  .tab-bar {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 64px;
+    background: #fff; border-top: 1px solid #eee; display: flex;
+    justify-content: space-around; align-items: center; z-index: 100;
+  }
+  .tab-item {
+    text-align: center; cursor: pointer; padding: 6px 12px;
+    color: #999; transition: color .2s; font-size: 10px;
+  }
+  .tab-item.active { color: #667eea; }
+  .tab-item .tab-icon { font-size: 22px; margin-bottom: 2px; }
+
+  /* === Page: 词汇测试 === */
+  .test-page { padding: 24px; text-align: center; background: linear-gradient(180deg, #667eea 0%, #764ba2 100%); color: #fff; min-height: 100%; }
+  .test-progress { display: flex; gap: 3px; margin: 20px 0; justify-content: center; }
+  .test-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.3); }
+  .test-dot.done { background: #fff; }
+  .test-dot.current { background: #fff; width: 20px; border-radius: 4px; }
+  .test-counter { font-size: 13px; opacity: .7; margin-bottom: 30px; }
+  .test-word { font-size: 36px; font-weight: 700; margin: 30px 0 8px; }
+  .test-phonetic { font-size: 15px; opacity: .7; margin-bottom: 40px; }
+  .test-options { display: flex; flex-direction: column; gap: 10px; padding: 0 8px; }
+  .test-option {
+    background: rgba(255,255,255,.15); border: 1.5px solid rgba(255,255,255,.25);
+    border-radius: 12px; padding: 14px 18px; text-align: left; font-size: 15px;
+    cursor: pointer; transition: all .2s; color: #fff;
+  }
+  .test-option:hover { background: rgba(255,255,255,.25); border-color: #fff; }
+  .test-option.correct { background: rgba(76,175,80,.5); border-color: #4caf50; }
+  .test-option.wrong { background: rgba(244,67,54,.3); border-color: #f44336; }
+  .test-title { font-size: 18px; font-weight: 600; margin-top: 20px; }
+  .test-subtitle { font-size: 13px; opacity: .7; margin-top: 6px; }
+
+  /* === Page: 首页/Dashboard === */
+  .home-page { background: #f8f9fb; }
+  .home-header {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff; padding: 20px 24px 30px; border-radius: 0 0 24px 24px;
+  }
+  .home-greeting { font-size: 14px; opacity: .8; }
+  .home-title { font-size: 22px; font-weight: 700; margin-top: 4px; }
+  .home-stats { display: flex; gap: 10px; margin-top: 18px; }
+  .home-stat {
+    flex: 1; background: rgba(255,255,255,.18); border-radius: 12px;
+    padding: 12px; text-align: center;
+  }
+  .home-stat .hs-num { font-size: 24px; font-weight: 700; }
+  .home-stat .hs-label { font-size: 11px; opacity: .8; margin-top: 2px; }
+
+  .home-section { padding: 20px 20px 0; }
+  .home-section h3 { font-size: 16px; font-weight: 700; color: #333; margin-bottom: 12px; }
+
+  .review-card {
+    background: #fff; border-radius: 14px; padding: 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06); margin-bottom: 12px;
+  }
+  .review-card .rc-top { display: flex; justify-content: space-between; align-items: center; }
+  .review-card .rc-num { font-size: 32px; font-weight: 700; color: #667eea; }
+  .review-card .rc-label { font-size: 14px; color: #333; font-weight: 600; }
+  .review-card .rc-sub { font-size: 12px; color: #999; margin-top: 2px; }
+  .review-card .rc-btn {
+    background: #667eea; color: #fff; border: none; padding: 8px 20px;
+    border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+    margin-top: 12px;
+  }
+
+  .recent-words { display: flex; flex-direction: column; gap: 8px; }
+  .rw-item {
+    background: #fff; border-radius: 10px; padding: 12px 16px;
+    display: flex; justify-content: space-between; align-items: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  }
+  .rw-word { font-weight: 600; font-size: 15px; color: #333; }
+  .rw-meaning { font-size: 13px; color: #999; }
+  .rw-badge {
+    font-size: 10px; padding: 3px 8px; border-radius: 10px; font-weight: 600;
+  }
+  .badge-new { background: #fff3cd; color: #f0ad4e; }
+  .badge-learning { background: #e3f2fd; color: #1976d2; }
+  .badge-review { background: #fce4ec; color: #e91e63; }
+
+  /* === Page: 复习 === */
+  .review-page { background: #f8f9fb; padding: 20px; }
+  .review-header { text-align: center; margin-bottom: 24px; padding-top: 10px; }
+  .review-header h2 { font-size: 18px; color: #333; }
+  .review-header p { font-size: 13px; color: #999; margin-top: 4px; }
+  .review-progress-bar {
+    height: 4px; background: #eee; border-radius: 2px; margin-top: 12px; overflow: hidden;
+  }
+  .review-progress-fill { height: 100%; width: 35%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 2px; }
+
+  .flashcard {
+    background: #fff; border-radius: 20px; padding: 32px 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.06); text-align: center;
+    min-height: 320px; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; position: relative;
+  }
+  .fc-word { font-size: 32px; font-weight: 700; color: #1a1a2e; }
+  .fc-phonetic { font-size: 15px; color: #999; margin-top: 6px; }
+  .fc-divider { width: 40px; height: 2px; background: #eee; margin: 20px 0; border-radius: 1px; }
+  .fc-answer { display: none; }
+  .fc-answer.show { display: block; }
+  .fc-meaning { font-size: 20px; color: #333; font-weight: 600; }
+  .fc-example { font-size: 13px; color: #999; margin-top: 10px; font-style: italic; line-height: 1.5; }
+  .fc-context { font-size: 12px; color: #667eea; margin-top: 8px; background: #f0f2ff; padding: 10px; border-radius: 8px; line-height: 1.5; }
+  .fc-tap { font-size: 13px; color: #bbb; margin-top: 20px; }
+
+  .review-btns { display: flex; gap: 8px; margin-top: 20px; }
+  .review-btn {
+    flex: 1; padding: 14px 8px; border: none; border-radius: 12px;
+    font-size: 13px; font-weight: 600; cursor: pointer; text-align: center;
+  }
+  .rb-again { background: #fce4ec; color: #e91e63; }
+  .rb-fuzzy { background: #fff3e0; color: #ff9800; }
+  .rb-good { background: #e8f5e9; color: #4caf50; }
+  .rb-easy { background: #e3f2fd; color: #1976d2; }
+  .review-btn .rb-interval { display: block; font-size: 10px; font-weight: 400; margin-top: 3px; opacity: .7; }
+
+  /* === Page: 词库 === */
+  .vocab-page { background: #f8f9fb; }
+  .vocab-header { padding: 16px 20px; background: #fff; border-bottom: 1px solid #eee; }
+  .vocab-search {
+    width: 100%; padding: 10px 14px; border: 1px solid #eee; border-radius: 10px;
+    font-size: 14px; background: #f8f9fb; outline: none;
+  }
+  .vocab-tabs { display: flex; padding: 12px 20px 0; gap: 6px; background: #fff; }
+  .vocab-tab {
+    padding: 6px 14px; border-radius: 16px; font-size: 12px; font-weight: 600;
+    cursor: pointer; background: #f5f5f5; color: #999;
+  }
+  .vocab-tab.active { background: #667eea; color: #fff; }
+  .vocab-list { padding: 12px 20px; }
+  .vl-item {
+    background: #fff; border-radius: 12px; padding: 14px 16px;
+    margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  }
+  .vl-top { display: flex; justify-content: space-between; align-items: center; }
+  .vl-word { font-size: 16px; font-weight: 700; color: #333; }
+  .vl-status { font-size: 10px; padding: 3px 8px; border-radius: 10px; font-weight: 600; }
+  .vl-meaning { font-size: 13px; color: #666; margin-top: 4px; }
+  .vl-meta { font-size: 11px; color: #bbb; margin-top: 6px; }
+
+  /* === Page: 设置 === */
+  .settings-page { background: #f8f9fb; padding: 20px; }
+  .settings-page h2 { font-size: 20px; font-weight: 700; margin: 10px 0 16px; color: #333; }
+  .setting-group { background: #fff; border-radius: 14px; margin-bottom: 16px; overflow: hidden; }
+  .setting-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 18px; border-bottom: 1px solid #f5f5f5;
+  }
+  .setting-item:last-child { border: none; }
+  .si-label { font-size: 14px; color: #333; }
+  .si-value { font-size: 14px; color: #999; }
+  .si-toggle {
+    width: 44px; height: 24px; background: #4caf50; border-radius: 12px;
+    position: relative;
+  }
+  .si-toggle::after {
+    content: ''; width: 20px; height: 20px; background: #fff;
+    border-radius: 50%; position: absolute; top: 2px; right: 2px;
+  }
+  .si-toggle.off { background: #ddd; }
+  .si-toggle.off::after { right: auto; left: 2px; }
+
+  .proto-label {
+    position: fixed; bottom: 20px; right: 20px; background: #1a1a2e;
+    color: #fff; padding: 8px 16px; border-radius: 20px;
+    font-size: 12px; z-index: 9999; opacity: .7;
+  }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="notch"></div>
+  <div class="screen">
+
+    <!-- Page: 词汇测试 (Onboarding) -->
+    <div class="page active" id="pageTest">
+      <div class="test-page">
+        <div class="test-title">词汇量测试</div>
+        <div class="test-subtitle">40 道题，3 分钟完成</div>
+        <div class="test-progress">
+          <div class="test-dot done"></div><div class="test-dot done"></div>
+          <div class="test-dot done"></div><div class="test-dot done"></div>
+          <div class="test-dot done"></div><div class="test-dot done"></div>
+          <div class="test-dot current"></div><div class="test-dot"></div>
+          <div class="test-dot"></div><div class="test-dot"></div>
+          <div class="test-dot"></div><div class="test-dot"></div>
+        </div>
+        <div class="test-counter">7 / 40</div>
+        <div class="test-word">elaborate</div>
+        <div class="test-phonetic">/ɪˈlæbərət/</div>
+        <div class="test-options">
+          <div class="test-option" onclick="pickOption(this, false)">A. 消除</div>
+          <div class="test-option" onclick="pickOption(this, true)">B. 详尽的；精心制作的</div>
+          <div class="test-option" onclick="pickOption(this, false)">C. 歪曲</div>
+          <div class="test-option" onclick="pickOption(this, false)">D. 合并</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page: Home/Dashboard -->
+    <div class="page" id="pageHome">
+      <div class="home-header">
+        <div class="home-greeting">下午好</div>
+        <div class="home-title">今日学习</div>
+        <div class="home-stats">
+          <div class="home-stat"><div class="hs-num">5,240</div><div class="hs-label">词汇量</div></div>
+          <div class="home-stat"><div class="hs-num">23</div><div class="hs-label">待复习</div></div>
+          <div class="home-stat"><div class="hs-num">7</div><div class="hs-label">今日新词</div></div>
+        </div>
+      </div>
+
+      <div class="home-section">
+        <h3>今日复习</h3>
+        <div class="review-card">
+          <div class="rc-top">
+            <div>
+              <div class="rc-label">待复习单词</div>
+              <div class="rc-sub">预计 5 分钟</div>
+            </div>
+            <div class="rc-num">23</div>
+          </div>
+          <button class="rc-btn" onclick="switchPage('pageReview')">开始复习</button>
+        </div>
+      </div>
+
+      <div class="home-section">
+        <h3>最近生词</h3>
+        <div class="recent-words">
+          <div class="rw-item">
+            <div><div class="rw-word">paradigm</div><div class="rw-meaning">范式，典范</div></div>
+            <span class="rw-badge badge-new">新</span>
+          </div>
+          <div class="rw-item">
+            <div><div class="rw-word">superposition</div><div class="rw-meaning">叠加态</div></div>
+            <span class="rw-badge badge-new">新</span>
+          </div>
+          <div class="rw-item">
+            <div><div class="rw-word">simultaneously</div><div class="rw-meaning">同时地</div></div>
+            <span class="rw-badge badge-learning">学习中</span>
+          </div>
+          <div class="rw-item">
+            <div><div class="rw-word">vulnerable</div><div class="rw-meaning">脆弱的</div></div>
+            <span class="rw-badge badge-review">待复习</span>
+          </div>
+          <div class="rw-item">
+            <div><div class="rw-word">resilient</div><div class="rw-meaning">有韧性的</div></div>
+            <span class="rw-badge badge-new">新</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page: 复习 -->
+    <div class="page" id="pageReview">
+      <div class="review-page">
+        <div class="review-header">
+          <h2>间隔复习</h2>
+          <p>第 8 / 23 个</p>
+          <div class="review-progress-bar"><div class="review-progress-fill"></div></div>
+        </div>
+
+        <div class="flashcard" onclick="toggleAnswer()">
+          <div class="fc-word">vulnerable</div>
+          <div class="fc-phonetic">/ˈvʌlnərəbl/ &#x1f50a;</div>
+          <div class="fc-divider"></div>
+          <div class="fc-answer" id="fcAnswer">
+            <div class="fc-meaning">adj. 易受攻击的，脆弱的</div>
+            <div class="fc-example">"The system is vulnerable to cyber attacks."</div>
+            <div class="fc-context">来自阅读：...potentially rendering much of today's encrypted data <b>vulnerable</b>.</div>
+          </div>
+          <div class="fc-tap" id="fcTap">点击翻转查看释义</div>
+        </div>
+
+        <div class="review-btns">
+          <button class="review-btn rb-again" onclick="nextCard()">不会<span class="rb-interval">&lt;1分钟</span></button>
+          <button class="review-btn rb-fuzzy" onclick="nextCard()">模糊<span class="rb-interval">今天</span></button>
+          <button class="review-btn rb-good" onclick="nextCard()">会<span class="rb-interval">3天后</span></button>
+          <button class="review-btn rb-easy" onclick="nextCard()">掌握<span class="rb-interval">7天后</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page: 词库 -->
+    <div class="page" id="pageVocab">
+      <div class="vocab-page">
+        <div class="vocab-header">
+          <input class="vocab-search" placeholder="搜索单词..." />
+        </div>
+        <div class="vocab-tabs">
+          <div class="vocab-tab active">全部 (156)</div>
+          <div class="vocab-tab">生词 (42)</div>
+          <div class="vocab-tab">学习中 (89)</div>
+          <div class="vocab-tab">已掌握 (25)</div>
+        </div>
+        <div class="vocab-list" style="padding-top:12px;">
+          <div class="vl-item">
+            <div class="vl-top">
+              <span class="vl-word">paradigm</span>
+              <span class="vl-status badge-new">生词</span>
+            </div>
+            <div class="vl-meaning">n. 范式，典范</div>
+            <div class="vl-meta">来自: The Rise of Quantum Computing... | 10分钟前</div>
+          </div>
+          <div class="vl-item">
+            <div class="vl-top">
+              <span class="vl-word">vulnerable</span>
+              <span class="vl-status badge-review">待复习</span>
+            </div>
+            <div class="vl-meaning">adj. 易受攻击的，脆弱的</div>
+            <div class="vl-meta">来自: The Rise of Quantum Computing... | 10分钟前</div>
+          </div>
+          <div class="vl-item">
+            <div class="vl-top">
+              <span class="vl-word">simultaneously</span>
+              <span class="vl-status badge-learning">学习中</span>
+            </div>
+            <div class="vl-meaning">adv. 同时地</div>
+            <div class="vl-meta">已复习 2 次 | 下次: 明天</div>
+          </div>
+          <div class="vl-item">
+            <div class="vl-top">
+              <span class="vl-word">comprehensive</span>
+              <span class="vl-status badge-learning">学习中</span>
+            </div>
+            <div class="vl-meaning">adj. 全面的，综合的</div>
+            <div class="vl-meta">已复习 3 次 | 下次: 3天后</div>
+          </div>
+          <div class="vl-item">
+            <div class="vl-top">
+              <span class="vl-word">elaborate</span>
+              <span class="vl-status" style="background:#e8f5e9;color:#4caf50;">已掌握</span>
+            </div>
+            <div class="vl-meaning">adj. 详尽的；精心制作的</div>
+            <div class="vl-meta">已掌握 | 共复习 6 次</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page: 设置 -->
+    <div class="page" id="pageSettings">
+      <div class="settings-page">
+        <h2>设置</h2>
+        <div class="setting-group">
+          <div class="setting-item">
+            <span class="si-label">每日新词上限</span>
+            <span class="si-value">20 词</span>
+          </div>
+          <div class="setting-item">
+            <span class="si-label">每日复习上限</span>
+            <span class="si-value">50 词</span>
+          </div>
+          <div class="setting-item">
+            <span class="si-label">标注强度</span>
+            <span class="si-value">中等</span>
+          </div>
+        </div>
+        <div class="setting-group">
+          <div class="setting-item">
+            <span class="si-label">生词高亮</span>
+            <div class="si-toggle"></div>
+          </div>
+          <div class="setting-item">
+            <span class="si-label">学习中词弱标注</span>
+            <div class="si-toggle"></div>
+          </div>
+          <div class="setting-item">
+            <span class="si-label">自动入库</span>
+            <div class="si-toggle"></div>
+          </div>
+          <div class="setting-item">
+            <span class="si-label">复习提醒</span>
+            <div class="si-toggle"></div>
+          </div>
+        </div>
+        <div class="setting-group">
+          <div class="setting-item">
+            <span class="si-label">我的词汇量</span>
+            <span class="si-value">约 5,240 词</span>
+          </div>
+          <div class="setting-item">
+            <span class="si-label">重新测试</span>
+            <span class="si-value" style="color:#667eea;">开始 &rsaquo;</span>
+          </div>
+          <div class="setting-item">
+            <span class="si-label">导入词表</span>
+            <span class="si-value" style="color:#667eea;">选择 &rsaquo;</span>
+          </div>
+          <div class="setting-item">
+            <span class="si-label">导出词库</span>
+            <span class="si-value" style="color:#667eea;">导出 &rsaquo;</span>
+          </div>
+        </div>
+        <div class="setting-group">
+          <div class="setting-item">
+            <span class="si-label">账号</span>
+            <span class="si-value">user@example.com</span>
+          </div>
+          <div class="setting-item">
+            <span class="si-label">同步状态</span>
+            <span class="si-value" style="color:#4caf50;">已同步</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+      <div class="tab-item active" onclick="switchPage('pageHome')" id="tabHome">
+        <div class="tab-icon">&#x1f3e0;</div>首页
+      </div>
+      <div class="tab-item" onclick="switchPage('pageReview')" id="tabReview">
+        <div class="tab-icon">&#x1f4d6;</div>复习
+      </div>
+      <div class="tab-item" onclick="switchPage('pageVocab')" id="tabVocab">
+        <div class="tab-icon">&#x1f4da;</div>词库
+      </div>
+      <div class="tab-item" onclick="switchPage('pageSettings')" id="tabSettings">
+        <div class="tab-icon">&#x2699;&#xfe0f;</div>设置
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="proto-label">原型演示 - WordWise App</div>
+
+<script>
+function switchPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+  const tabMap = { pageHome:'tabHome', pageReview:'tabReview', pageVocab:'tabVocab', pageSettings:'tabSettings' };
+  if (tabMap[id]) document.getElementById(tabMap[id]).classList.add('active');
+}
+
+function pickOption(el, correct) {
+  el.classList.add(correct ? 'correct' : 'wrong');
+  setTimeout(() => {
+    el.classList.remove('correct', 'wrong');
+    switchPage('pageHome');
+  }, 800);
+}
+
+function toggleAnswer() {
+  const a = document.getElementById('fcAnswer');
+  const t = document.getElementById('fcTap');
+  a.classList.toggle('show');
+  t.style.display = a.classList.contains('show') ? 'none' : 'block';
+}
+
+function nextCard() {
+  const a = document.getElementById('fcAnswer');
+  const t = document.getElementById('fcTap');
+  a.classList.remove('show');
+  t.style.display = 'block';
+}
+</script>
+</body>
+</html>

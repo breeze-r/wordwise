@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  /* ═══════════════════════════════════════════
+     WordWise Design System
+     Primary: Teal #0d9488 / Deep Teal #0f766e
+     Heading: Deep Slate #0f172a
+     Body: Slate #475569
+     Surface: #f8fafc
+     Border: #e2e8f0
+     Accent: Amber #f59e0b (warnings)
+     Radius: 8-12px
+     Shadow: blue-tinted multi-layer
+     ═══════════════════════════════════════════ */
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 380px;
+    font-family: -apple-system, "SF Pro Display", "Segoe UI", "PingFang SC", sans-serif;
+    font-size: 13px;
+    color: #334155;
+    background: #ffffff;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: linear-gradient(135deg, #0f766e 0%, #0d9488 50%, #14b8a6 100%);
+    color: #fff;
+    padding: 20px 24px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .header::after {
+    content: "";
+    position: absolute;
+    top: -40%; right: -20%;
+    width: 160px; height: 160px;
+    background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .brand-icon {
+    width: 28px; height: 28px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .brand-icon svg {
+    width: 18px; height: 18px;
+  }
+  .brand h1 {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+  .brand p {
+    font-size: 11px;
+    opacity: 0.75;
+    margin-top: 1px;
+    font-weight: 400;
+  }
+  .header-actions {
+    position: relative; z-index: 1;
+  }
+  .mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.22);
+    color: rgba(255,255,255,0.95);
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    backdrop-filter: blur(4px);
+  }
+
+  /* ── Loading ── */
+  .loading {
+    text-align: center;
+    padding: 48px 24px;
+    color: #94a3b8;
+    font-size: 13px;
+  }
+  .loading::before {
+    content: "";
+    display: block;
+    width: 24px; height: 24px;
+    border: 2px solid #e2e8f0;
+    border-top-color: #0d9488;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin: 0 auto 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .btn {
+    flex: 1;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .btn-primary {
+    background: #0d9488;
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(13,148,136,0.3);
+  }
+  .btn-primary:hover {
+    background: #0f766e;
+    box-shadow: 0 4px 12px rgba(13,148,136,0.25);
+    transform: translateY(-0.5px);
+  }
+  /* ── Dashboard ── */
+  .dashboard { display: none; }
+
+  /* Stats */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    padding: 16px 20px;
+    background: #f8fafc;
+  }
+  .stat {
+    text-align: center;
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 12px 4px 10px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+    transition: box-shadow 0.15s;
+  }
+  .stat:hover {
+    box-shadow: 0 4px 12px rgba(15,23,42,0.08);
+  }
+  .stat .num {
+    font-size: 20px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+  }
+  .stat:first-child .num { color: #0d9488; }
+  .stat .label {
+    font-size: 10px;
+    color: #94a3b8;
+    margin-top: 4px;
+    font-weight: 500;
+  }
+
+  /* LLM Status */
+  .llm-status {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    margin: 0 16px;
+    border-radius: 10px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+  }
+  .llm-status.active { display: flex; }
+  .llm-status.ok {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+  }
+  .llm-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .llm-dot.error {
+    background: #ef4444;
+    box-shadow: 0 0 0 0 rgba(239,68,68,0.5);
+    animation: breathe 2s ease-in-out infinite;
+  }
+  .llm-dot.ok {
+    background: #22c55e;
+    box-shadow: 0 0 0 0 rgba(34,197,94,0.4);
+    animation: breathe-green 2.5s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+    50%     { box-shadow: 0 0 0 5px rgba(239,68,68,0); }
+  }
+  @keyframes breathe-green {
+    0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+    50%     { box-shadow: 0 0 0 4px rgba(34,197,94,0); }
+  }
+  .llm-status-text {
+    font-size: 11px;
+    line-height: 1.4;
+    color: #92400e;
+  }
+  .llm-status.ok .llm-status-text { color: #166534; }
+
+  /* Toggle */
+  .toggle-section {
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .toggle-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0f172a;
+  }
+  .toggle {
+    width: 44px; height: 24px;
+    border-radius: 12px;
+    background: #cbd5e1;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .toggle.on { background: #0d9488; }
+  .toggle::after {
+    content: "";
+    width: 20px; height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    position: absolute;
+    top: 2px;
+    transition: left 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  }
+  .toggle.on::after { left: 22px; }
+  .toggle:not(.on)::after { left: 2px; }
+
+  /* ── Section shared ── */
+  .section {
+    padding: 16px 20px;
+    border-top: 1px solid #f1f5f9;
+  }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .section-icon {
+    width: 20px; height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .section-icon svg {
+    width: 16px; height: 16px;
+    stroke: #0d9488;
+    stroke-width: 1.8;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.2px;
+  }
+  .section-desc {
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.5;
+    margin-bottom: 10px;
+    padding-left: 26px;
+  }
+  .section-status {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-top: 8px;
+    min-height: 16px;
+    padding-left: 26px;
+  }
+
+  /* Chips (shared for level & packs) */
+  .chip-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-left: 26px;
+  }
+  .chip {
+    padding: 5px 12px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 20px;
+    font-size: 11px;
+    cursor: pointer;
+    background: #fff;
+    color: #64748b;
+    transition: all 0.15s;
+    user-select: none;
+    font-weight: 500;
+  }
+  .chip:hover {
+    border-color: #0d9488;
+    color: #0d9488;
+    background: #f0fdfa;
+  }
+  .chip.active {
+    border-color: #0d9488;
+    background: #0d9488;
+    color: #fff;
+    font-weight: 600;
+  }
+  .chip .chip-count {
+    font-size: 9px;
+    opacity: 0.7;
+    margin-left: 3px;
+  }
+
+  /* Pack chips */
+  .pack-chip {
+    padding: 5px 10px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 20px;
+    font-size: 11px;
+    cursor: pointer;
+    background: #fff;
+    color: #64748b;
+    transition: all 0.15s;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 500;
+  }
+  .pack-chip:hover {
+    border-color: #0d9488;
+    color: #0d9488;
+    background: #f0fdfa;
+  }
+  .pack-chip.active {
+    border-color: #0d9488;
+    background: #f0fdfa;
+    color: #0f766e;
+    font-weight: 600;
+  }
+  .pack-chip .pack-icon {
+    width: 14px; height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .pack-chip .pack-icon svg {
+    width: 14px; height: 14px;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .pack-chip .pack-count {
+    font-size: 9px;
+    opacity: 0.55;
+  }
+
+  /* ── Settings (LLM) ── */
+  .settings-section {
+    padding: 16px 20px 20px;
+    border-top: 1px solid #f1f5f9;
+    background: #f8fafc;
+  }
+  .settings-grid {
+    display: grid;
+    gap: 10px;
+    padding-left: 26px;
+  }
+  .settings-grid label {
+    display: block;
+    font-size: 11px;
+    color: #64748b;
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  .settings-grid input,
+  .settings-grid select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #0f172a;
+    outline: none;
+    background: #fff;
+    font-family: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .settings-grid input:focus,
+  .settings-grid select:focus {
+    border-color: #0d9488;
+    box-shadow: 0 0 0 3px rgba(13,148,136,0.08);
+  }
+  .settings-grid input:disabled,
+  .settings-grid select:disabled {
+    background: #f1f5f9;
+    color: #94a3b8;
+    border-color: #e2e8f0;
+  }
+  .settings-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 14px;
+    padding-left: 26px;
+  }
+  .settings-status {
+    flex: 1;
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.4;
+    min-height: 16px;
+  }
+  .btn-small {
+    flex: none;
+    padding: 8px 16px;
+    font-size: 12px;
+  }
+  .hint {
+    font-size: 10px;
+    color: #94a3b8;
+    line-height: 1.5;
+    margin-top: 10px;
+    padding-left: 26px;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    padding: 14px 20px;
+    border-top: 1px solid #f1f5f9;
+    text-align: center;
+    font-size: 10px;
+    color: #cbd5e1;
+    letter-spacing: 0.3px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading" id="loadingView">加载中</div>
+
+<!-- Dashboard -->
+<div class="dashboard" id="dashboardView">
+  <div class="header">
+    <div class="header-top">
+      <div class="brand">
+        <div class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/><path d="M17 8l2 2" opacity=".6"/><circle cx="18.5" cy="6.5" r="1" fill="#fff" stroke="none" opacity=".6"/></svg></div>
+        <div>
+          <h1>WordWise</h1>
+          <p>Read to Learn English</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="mode-badge">本地模式</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="num" id="statVocab">-</div>
+      <div class="label">词汇量</div>
+    </div>
+    <div class="stat">
+      <div class="num" id="statNew">-</div>
+      <div class="label">生词</div>
+    </div>
+    <div class="stat">
+      <div class="num" id="statLearning">-</div>
+      <div class="label">学习中</div>
+    </div>
+    <div class="stat">
+      <div class="num" id="statMastered">-</div>
+      <div class="label">已掌握</div>
+    </div>
+  </div>
+
+  <div class="llm-status" id="llmStatus">
+    <span class="llm-dot" id="llmDot"></span>
+    <span class="llm-status-text" id="llmStatusText"></span>
+  </div>
+
+  <div class="toggle-section">
+    <span class="toggle-label">插件启用</span>
+    <div class="toggle on" id="enableToggle"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+      <span class="section-title">后端连接</span>
+    </div>
+    <p class="section-desc">WordWise 本地服务地址，默认 http://localhost:8000</p>
+    <div class="settings-grid">
+      <div>
+        <input id="backendUrl" type="text" placeholder="http://localhost:8000" />
+      </div>
+    </div>
+    <div class="section-status" id="backendStatus"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
+      <span class="section-title">我的英语水平</span>
+    </div>
+    <p class="section-desc">选择当前水平，该等级以下词汇不再标注</p>
+    <div class="chip-grid" id="levelGrid"></div>
+    <div class="section-status" id="levelStatus"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-icon"><svg viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+      <span class="section-title">专业词典包</span>
+    </div>
+    <p class="section-desc">启用后，该领域的生僻词汇也会被标注翻译</p>
+    <div class="chip-grid" id="packsGrid"></div>
+    <div class="section-status" id="packsStatus"></div>
+  </div>
+
+  <div class="settings-section">
+    <div class="section-header">
+      <span class="section-icon"><svg viewBox="0 0 24 24"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M19 13l.75 2.25L22 16l-2.25.75L19 19l-.75-2.25L16 16l2.25-.75L19 13z" opacity=".6"/></svg></span>
+      <span class="section-title">AI 翻译引擎</span>
+    </div>
+    <p class="section-desc">API Key 仅保存在浏览器本地，仅在翻译请求时使用</p>
+
+    <div class="settings-grid">
+      <div>
+        <label for="translatorMode">翻译模式</label>
+        <select id="translatorMode">
+          <option value="local_wordbook">仅本地词典</option>
+          <option value="hybrid">本地优先 + AI 补全</option>
+          <option value="remote">仅 AI 翻译</option>
+        </select>
+      </div>
+      <div>
+        <label for="translatorApiUrl">LLM API 地址</label>
+        <input id="translatorApiUrl" type="text" placeholder="https://api.example.com/v1/chat/completions" />
+      </div>
+      <div>
+        <label for="translatorModel">模型名称</label>
+        <input id="translatorModel" type="text" placeholder="gpt-4o-mini / claude-sonnet-4-6 ..." />
+      </div>
+      <div>
+        <label for="translatorApiKey">API Key</label>
+        <input id="translatorApiKey" type="password" placeholder="sk-..." />
+      </div>
+    </div>
+
+    <div class="settings-actions">
+      <div class="settings-status" id="settingsStatus"></div>
+      <button class="btn btn-primary btn-small" id="saveSettingsBtn">保存</button>
+    </div>
+
+    <p class="hint">选择「仅本地词典」模式无需填写 Key，即可使用基础翻译功能。</p>
+  </div>
+
+  <div class="footer">WordWise v0.1.0</div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
