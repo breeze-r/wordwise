@@ -54,13 +54,31 @@ Track your vocabulary stats, configure vocabulary level, enable domain-specific 
 
 </td>
 </tr>
+<tr>
+<td width="50%">
+
+### AI Article Summary
+One-click bilingual structured outline of any article. Extracts title, overview, and key sections — switch between Chinese, English, or bilingual display.
+
+<img src="docs/summary-preview.png" width="260" alt="AI summary sidebar">
+
+</td>
+<td width="50%">
+
+### Word Detail Panel
+Click any annotated word to see phonetics, part-of-speech tags, multiple definitions, and the word used in its original context.
+
+<img src="docs/detail-preview.png" width="280" alt="Word detail panel">
+
+</td>
+</tr>
 </table>
 
 ### Core Capabilities
 
 - **Smart Word Detection** — Filters out common words based on your vocabulary level. Only annotates words you actually need to learn.
-- **Click-to-Expand Detail Panel** — Tap any annotated word to see phonetics, part-of-speech tags, multiple senses, and the word used in context.
-- **AI Article Summary** — One-click bilingual (Chinese/English) structured summary sidebar powered by LLM. Supports language switching (CN / EN / Bilingual).
+- **Click-to-Expand Detail Panel** — Phonetics, POS tags, multiple senses, contextual usage, and "add to vocabulary" in one panel.
+- **AI Article Summary** — One-click structured outline with title, overview, and section-by-section bullet points. Supports CN / EN / Bilingual switching.
 - **Three Translation Modes**:
   - `Local Dictionary Only` — Offline-capable, powered by ECDICT (350k+ entries)
   - `Hybrid` — Local dictionary first, LLM fills the gaps
