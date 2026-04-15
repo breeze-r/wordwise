@@ -1,131 +1,197 @@
-# WordWise
+<p align="center">
+  <img src="extension/icons/icon128.png" width="80" height="80" alt="WordWise icon">
+</p>
 
-[English README](./README.md)
+<h1 align="center">WordWise</h1>
 
-![WordWise 概览图](./docs/wordwise-overview.svg)
+<p align="center">
+  <strong>阅读即学词 — 智能标注生词，边读边学英语</strong>
+</p>
 
-WordWise 是一个开源的英文网页阅读辅助工具。
-它会在网页里直接标注你不熟悉的单词，点击后还能展开更完整的释义信息，并用本地学习档案记录你的阅读与复习过程。
+<p align="center">
+  <a href="./README.md">English</a> &middot;
+  <a href="#快速开始">快速开始</a> &middot;
+  <a href="#功能特点">功能特点</a> &middot;
+  <a href="https://github.com/breeze-r/wordwise/issues">反馈建议</a>
+</p>
 
-当前仓库包含：
+<p align="center">
+  <img src="https://img.shields.io/github/license/breeze-r/wordwise?color=0d9488" alt="License">
+  <img src="https://img.shields.io/badge/manifest-v3-0d9488" alt="Manifest V3">
+  <img src="https://img.shields.io/badge/version-1.0.1-0d9488" alt="Version">
+</p>
 
-- Chrome 插件，位于 [`extension/`](./extension)
-- 本地 FastAPI 后端，位于 [`backend/`](./backend)
-- BYOK 模式：你的模型 Key 保存在浏览器本地，不上传到仓库
+---
+
+<p align="center">
+  <img src="docs/hero-preview.png" width="960" alt="WordWise 实际效果 — 行内标注、词义面板、AI 摘要侧边栏">
+</p>
+
+## WordWise 是什么？
+
+WordWise 是一个开源 Chrome 插件，帮助你在**日常英文阅读中自然地学习单词**。它会自动检测网页上你不熟悉的词汇，在原文中直接标注中文翻译，点击即可展开完整释义。
+
+不需要专门开一个背单词 App——你每天浏览的英文网页，就是最好的学习材料。
 
 ## 功能特点
 
-- 浏览英文网页时自动给生词加括号注释
-- 支持本地词典模式，响应快，适合基础离线查词
-- 支持 Hybrid / Remote 模式，用你自己的 LLM 做语境翻译
-- 点击单词可查看词性、多义、英音、美音、英文释义
-- 支持词汇等级过滤与专业词典包
-- 自带词汇测试与复习接口，可扩展为完整学习闭环
-- 当前版本已去掉登录，默认使用匿名本地学习档案
+<table>
+<tr>
+<td width="50%">
 
-## 架构图
+### 行内标注
+生词直接在文本流中标注简短中文释义，不打断阅读节奏。
 
-![WordWise 架构图](./docs/wordwise-architecture.svg)
+<img src="docs/annotation-preview.png" width="100%" alt="行内标注效果">
 
-## 目录结构
+</td>
+<td width="50%">
 
-```text
-backend/
-  main.py
-  routers/
-  services/
-  scripts/
-extension/
-  manifest.json
-  background.js
-  content.js
-  popup.html
-  popup.js
-docs/
+### 插件弹窗
+查看词汇统计、配置英语水平、启用专业词典包、管理 LLM 设置。
+
+<img src="docs/popup-preview.png" width="260" alt="插件弹窗">
+
+</td>
+</tr>
+</table>
+
+### 核心能力
+
+- **智能词汇检测** — 根据你的词汇等级自动过滤常见词，只标注你真正需要学的词。
+- **点击展开详情面板** — 点击标注词即可看到音标、词性、多义项释义，以及该词在原文中的上下文。
+- **AI 文章摘要** — 一键生成中英双语结构化摘要侧边栏，支持 中文 / English / 双语 三种显示模式。
+- **三种翻译模式**：
+  - `仅本地词典` — 离线可用，基于 ECDICT（35万+ 词条）
+  - `本地优先 + AI 补全` — 本地词典查不到的词，由 LLM 补充
+  - `仅 AI 翻译` — 完全依赖 LLM 做语境翻译
+- **词汇等级过滤** — 选择你的英语水平（初中 ~ 研究生），低于该等级的词不再标注。
+- **专业词典包** — 支持 GRE、托福、医学、科技、法律、商务等领域词包。
+- **BYOK 模式** — 你的 API Key 只保存在浏览器本地，仅在翻译请求时附带给后端，不会上传到任何服务器。
+- **间隔重复** — 内置基于曝光次数的词汇复习系统。
+- **隐私优先** — 无需注册账号，所有学习数据保存在本地。
+
+## 架构
+
+```
+                  Chrome 插件                            本地后端
+              ┌─────────────────────┐              ┌──────────────────────┐
+  网页内容 ──> │  content.js         │   HTTP/JSON  │  FastAPI (Python)    │
+              │  - 词汇检测          │ ──────────── │  - 词汇数据库         │
+              │  - 行内标注          │              │  - ECDICT 查词        │
+              │  - 详情面板          │              │  - LLM 代理转发       │
+              │  - 摘要侧边栏        │              │  - 间隔重复           │
+              ├─────────────────────┤              └──────────────────────┘
+              │  background.js      │                        │
+              │  - API 路由转发      │                  ┌─────┴─────┐
+              │  - 配置存储          │                  │ LLM API   │
+              ├─────────────────────┤                  │ (OpenAI,  │
+              │  popup.html/js      │                  │  Claude,  │
+              │  - 设置界面          │                  │  其他)     │
+              └─────────────────────┘                  └───────────┘
 ```
 
-## 使用方式
+## 快速开始
 
-### 1. 启动本地后端
+### 1. 启动后端服务
 
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
+cp .env.example .env          # 按需修改 .env
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
-
-当前插件默认连接 `http://localhost:8000`。
 
 ### 2. 加载插件
 
 1. 打开 `chrome://extensions`
-2. 开启右上角开发者模式
-3. 点击“加载已解压的扩展程序”
+2. 打开右上角**开发者模式**
+3. 点击**加载已解压的扩展程序**
 4. 选择 `extension/` 目录
 
-### 3. 配置翻译模式
+### 3. 配置（可选）
 
-插件支持三种模式：
+打开插件弹窗，按需配置：
 
-- 仅本地词典
-- Hybrid：本地优先，LLM 补全
-- 仅远程 LLM
+| 设置项 | 说明 |
+|--------|------|
+| **后端地址** | 默认 `http://localhost:8000`，如果后端部署在其他位置可修改 |
+| **翻译模式** | `仅本地词典` / `本地优先 + AI 补全` / `仅 AI 翻译` |
+| **LLM API 地址** | 如 `https://api.openai.com/v1/chat/completions` |
+| **模型名称** | 如 `gpt-4o-mini`、`claude-sonnet-4-20250514` 等 |
+| **API Key** | 你的密钥，仅保存在浏览器本地 |
 
-如果你启用 LLM，需要在插件设置里填写：
+> **提示：** 使用「仅本地词典」模式不需要 API Key，基于内置 35 万词条的 ECDICT 词典即可获得基础翻译。
 
-- API 地址
-- 模型名称
-- API Key
+## 项目结构
 
-Key 只会保存在浏览器本地，并且只在阅读相关请求时附带给后端。
-
-## 词典数据说明
-
-这个仓库不会直接提交大体积生成文件。
-
-已在 `.gitignore` 中排除：
-
-- `backend/data/ecdict.db`
-- `backend/data/ecdict.csv`
-- `backend/data/ECDICT-master/`
-- `backend/wordwise.db` 等本地运行数据库
-
-如果你希望获得更完整的本地词典能力，需要自行下载 ECDICT，并构建 SQLite 索引：
-
-```bash
-cd backend
-source .venv/bin/activate
-python3 scripts/build_ecdict_index.py
+```
+wordwise/
+├── extension/           # Chrome 插件（Manifest V3）
+│   ├── manifest.json
+│   ├── background.js    # Service Worker，API 路由
+│   ├── content.js       # 页面标注、详情面板、摘要
+│   ├── content.css      # 所有标注/面板/摘要样式
+│   ├── popup.html/js    # 插件弹窗 UI
+│   └── icons/           # 插件图标
+├── backend/             # FastAPI 本地后端
+│   ├── main.py          # 应用入口
+│   ├── routers/         # API 路由
+│   │   ├── reading.py   # /scan, /lookup, /summarize
+│   │   ├── vocabulary.py
+│   │   ├── review.py
+│   │   ├── test.py
+│   │   └── dict_packs.py
+│   ├── services/        # 业务逻辑
+│   │   ├── translator.py      # LLM 集成
+│   │   ├── local_dictionary.py
+│   │   ├── frequency.py
+│   │   └── spaced_repetition.py
+│   ├── models.py        # ORM 模型
+│   ├── settings.py      # 环境变量配置
+│   └── data/            # 词典数据（不跟踪）
+└── docs/                # 截图与文档
 ```
 
-也可以通过 `.env` 覆盖本地词典路径。
+## 词典数据
 
-## 开源说明
+仓库不包含大体积词典文件。如需完整本地词典能力：
 
-- 开源协议：MIT
-- 如果你在自己的环境里使用 ECDICT，请保留其上游 License
-- 当前版本仍是“本地优先、开发者友好”的架构
+1. 下载 [ECDICT](https://github.com/skywind3000/ECDICT)
+2. 将 CSV 数据放入 `backend/data/`
+3. 构建 SQLite 索引：
 
-## 当前限制
+```bash
+cd backend && python3 scripts/build_ecdict_index.py
+```
 
-- 插件仍默认指向本地后端，而不是公网 API
-- 词详情增强字段目前还没有完整持久化缓存
-- 对 SPA、无限滚动页面的自动重扫还比较保守
+## 技术栈
 
-## 后续计划
+| 层级 | 技术 |
+|------|------|
+| 插件 | Chrome Manifest V3, 原生 JS, CSS |
+| 后端 | Python 3.11+, FastAPI, SQLAlchemy, SQLite |
+| 词典 | ECDICT（35万+ 词条） |
+| LLM | 任何 OpenAI 兼容接口（BYOK） |
 
-- 支持可配置后端地址或正式服务域名
-- 补齐词详情缓存，降低重复 LLM 请求
-- 提升 SPA / 懒加载页面的自动扫描能力
-- 整理 Chrome 商店发布流程
+## 参与贡献
 
-## 开发定位
+欢迎提 Issue 或 PR！
 
-- 插件弹窗：`extension/popup.html`、`extension/popup.js`
-- 页面标注逻辑：`extension/content.js`
-- 后端入口：`backend/main.py`
-- 阅读主链路：`backend/routers/reading.py`
-- 翻译逻辑：`backend/services/translator.py`
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
+3. 提交改动
+4. 推送到分支
+5. 发起 Pull Request
+
+## 开源协议
+
+[MIT](./LICENSE)
+
+---
+
+<p align="center">
+  <sub>多读多学，日积月累。</sub>
+</p>

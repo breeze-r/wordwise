@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WordWise Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif; background: #f8fafc; color: #1e293b; }
+
+  /* Article layout */
+  .article-container {
+    max-width: 720px;
+    margin: 40px auto;
+    padding: 48px 56px;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 8px 32px rgba(15,23,42,0.04);
+    line-height: 1.85;
+    font-size: 17px;
+    color: #334155;
+  }
+  .article-container h1 {
+    font-size: 32px;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.3;
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+  }
+  .article-meta {
+    font-size: 13px;
+    color: #94a3b8;
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .article-container p { margin-bottom: 20px; }
+
+  /* WordWise inline annotation */
+  .ww-cn {
+    display: inline;
+    color: #0d9488;
+    font-size: 0.72em;
+    font-weight: 600;
+    vertical-align: baseline;
+    position: relative;
+    top: -0.1em;
+    margin: 0 1px;
+    cursor: pointer;
+    border-bottom: 1.5px dashed rgba(13,148,136,0.3);
+    padding-bottom: 0px;
+    transition: color 0.15s, border-color 0.15s;
+    font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    letter-spacing: 0.3px;
+  }
+  .ww-cn:hover {
+    color: #0f766e;
+    border-bottom-color: #0d9488;
+  }
+
+  /* Detail panel */
+  .ww-detail {
+    position: fixed;
+    top: 180px;
+    left: 50%;
+    margin-left: 400px;
+    width: 340px;
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 4px 16px rgba(15,23,42,0.08), 0 16px 48px rgba(15,23,42,0.06), 0 0 0 1px rgba(15,23,42,0.04);
+    z-index: 999;
+    font-family: -apple-system, "SF Pro Text", "Segoe UI", "PingFang SC", sans-serif;
+    overflow: hidden;
+  }
+  .ww-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .ww-detail-word {
+    font-size: 22px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.3px;
+  }
+  .ww-detail-phonetic {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 2px;
+    font-family: monospace;
+  }
+  .ww-detail-brief {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #0d9488;
+    background: #f0fdfa;
+    padding: 3px 10px;
+    border-radius: 6px;
+  }
+  .ww-detail-body { padding: 16px 20px; }
+  .ww-detail-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #94a3b8;
+    margin-bottom: 8px;
+  }
+  .ww-detail-meaning {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .ww-detail-pos {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 700;
+    color: #6366f1;
+    background: #eef2ff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    height: fit-content;
+    margin-top: 2px;
+  }
+  .ww-detail-actions {
+    display: flex;
+    gap: 6px;
+    padding: 12px 20px 16px;
+    border-top: 1px solid #f1f5f9;
+  }
+  .ww-detail-btn {
+    flex: 1;
+    padding: 8px 0;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    color: #475569;
+  }
+  .ww-detail-btn.primary {
+    background: #0d9488;
+    color: #fff;
+    border-color: #0d9488;
+  }
+
+  /* Summary sidebar */
+  .ww-summary {
+    position: fixed;
+    top: 60px;
+    right: 24px;
+    width: 320px;
+    max-height: calc(100vh - 120px);
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 4px 16px rgba(15,23,42,0.08), 0 16px 48px rgba(15,23,42,0.06), 0 0 0 1px rgba(15,23,42,0.04);
+    z-index: 998;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    font-family: -apple-system, "SF Pro Text", "Segoe UI", "PingFang SC", sans-serif;
+  }
+  .ww-sum-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    border-bottom: 1px solid #f1f5f9;
+    background: linear-gradient(to bottom, #fafffe, #fff);
+    flex-shrink: 0;
+  }
+  .ww-sum-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ww-sum-brand svg {
+    width: 18px; height: 18px;
+    stroke: #0d9488; stroke-width: 1.8; fill: none;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .ww-sum-brand-text {
+    font-size: 13px; font-weight: 700;
+    color: #0f172a; text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .ww-sum-actions { display: flex; gap: 4px; align-items: center; }
+  .ww-sum-lang-btn {
+    padding: 3px 8px; border: 1.5px solid #e2e8f0;
+    border-radius: 6px; font-size: 11px; font-weight: 600;
+    background: #fff; color: #94a3b8; cursor: pointer;
+  }
+  .ww-sum-lang-btn.active {
+    background: #0d9488; color: #fff; border-color: #0d9488;
+  }
+  .ww-sum-close {
+    width: 24px; height: 24px; border: none; background: transparent;
+    color: #94a3b8; font-size: 14px; cursor: pointer;
+    border-radius: 6px; display: flex; align-items: center; justify-content: center;
+  }
+  .ww-sum-body {
+    padding: 16px 18px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .ww-sum-title {
+    font-size: 16px; font-weight: 700; color: #0f172a;
+    line-height: 1.4; margin-bottom: 10px;
+  }
+  .ww-sum-overview {
+    font-size: 13px; color: #64748b; line-height: 1.6;
+    margin-bottom: 16px; padding-bottom: 14px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .ww-sum-section { margin-bottom: 14px; }
+  .ww-sum-section-head {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+  }
+  .ww-sum-section-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #0d9488; flex-shrink: 0;
+  }
+  .ww-sum-section-title {
+    font-size: 13px; font-weight: 700; color: #0f172a;
+  }
+  .ww-sum-points { padding-left: 15px; }
+  .ww-sum-point {
+    font-size: 12px; color: #475569; line-height: 1.6;
+    margin-bottom: 4px; position: relative; padding-left: 12px;
+  }
+  .ww-sum-point::before {
+    content: ""; position: absolute; left: 0; top: 8px;
+    width: 4px; height: 4px; border-radius: 50%; background: #cbd5e1;
+  }
+
+  /* FAB */
+  .ww-fab {
+    position: fixed; bottom: 24px; right: 24px;
+    width: 44px; height: 44px; border-radius: 14px; border: none;
+    background: linear-gradient(135deg, #0f766e 0%, #0d9488 50%, #14b8a6 100%);
+    color: #fff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(13,148,136,0.3), 0 8px 24px rgba(13,148,136,0.15);
+  }
+  .ww-fab svg {
+    width: 22px; height: 22px; stroke: #fff; stroke-width: 1.8;
+    fill: none; stroke-linecap: round; stroke-linejoin: round;
+  }
+</style>
+</head>
+<body>
+
+<!-- Article -->
+<div class="article-container">
+  <h1>The Rise of Large Language Models in Modern Software Engineering</h1>
+  <div class="article-meta">By Sarah Chen &middot; April 15, 2026 &middot; 8 min read</div>
+
+  <p>In the rapidly <span class="ww-cn">演变</span>evolving landscape of software development, large language models have become
+  <span class="ww-cn">不可或缺的</span>indispensable tools for engineers. These sophisticated
+  <span class="ww-cn">算法</span>algorithms can process and generate human-like text, making them
+  <span class="ww-cn">非常宝贵的</span>invaluable for tasks ranging from code completion to documentation.</p>
+
+  <p>The <span class="ww-cn">激增</span>proliferation of LLMs has led to a fundamental shift in how we approach problem-solving.
+  Rather than <span class="ww-cn">精心制作</span>crafting every line of code manually, developers increasingly
+  <span class="ww-cn">利用</span>leverage AI assistants to <span class="ww-cn">加速</span>expedite their workflow. This
+  <span class="ww-cn">范式</span>paradigm shift has <span class="ww-cn">引发</span>sparked <span class="ww-cn">充满活力的</span>vibrant debates about
+  the future of <span class="ww-cn">手艺</span>craftsmanship in engineering.</p>
+
+  <p>However, the integration of LLMs into the software development lifecycle is not without its challenges.
+  Concerns about code <span class="ww-cn">可靠性</span>reliability, intellectual property, and the potential for
+  <span class="ww-cn">过度依赖</span>over-reliance on AI-generated solutions have prompted organizations to establish
+  <span class="ww-cn">严格的</span>rigorous <span class="ww-cn">治理</span>governance frameworks.</p>
+
+  <p>Despite these <span class="ww-cn">告诫</span>caveats, the <span class="ww-cn">轨迹</span>trajectory of LLM adoption continues upward.
+  Industry analysts predict that by 2028, virtually every <span class="ww-cn">商业的</span>commercial software product will
+  <span class="ww-cn">包含</span>incorporate some form of AI-assisted development in its pipeline.</p>
+</div>
+
+<!-- Detail Panel -->
+<div class="ww-detail" id="detailPanel">
+  <div class="ww-detail-header">
+    <div>
+      <div class="ww-detail-word">indispensable</div>
+      <div class="ww-detail-phonetic">/ˌɪndɪˈspensəbl/</div>
+      <div class="ww-detail-brief">不可或缺的</div>
+    </div>
+  </div>
+  <div class="ww-detail-body">
+    <div class="ww-detail-section-title">Definitions</div>
+    <div class="ww-detail-meaning">
+      <span class="ww-detail-pos">adj</span>
+      <span>absolutely necessary; essential 绝对必要的</span>
+    </div>
+    <div class="ww-detail-meaning">
+      <span class="ww-detail-pos">adj</span>
+      <span>not subject to being set aside or neglected 不可忽视的</span>
+    </div>
+    <div style="margin-top: 12px;">
+      <div class="ww-detail-section-title">In Context</div>
+      <div style="font-size: 13px; color: #475569; line-height: 1.5; font-style: italic;">
+        "...large language models have become <b style="color: #0d9488;">indispensable</b> tools for engineers."
+      </div>
+    </div>
+  </div>
+  <div class="ww-detail-actions">
+    <button class="ww-detail-btn">认识</button>
+    <button class="ww-detail-btn primary">加入生词本</button>
+  </div>
+</div>
+
+<!-- Summary Sidebar -->
+<div class="ww-summary">
+  <div class="ww-sum-header">
+    <div class="ww-sum-brand">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      <span class="ww-sum-brand-text">Overview</span>
+    </div>
+    <div class="ww-sum-actions">
+      <button class="ww-sum-lang-btn active">中</button>
+      <button class="ww-sum-lang-btn">EN</button>
+      <button class="ww-sum-lang-btn">双</button>
+      <button class="ww-sum-close">✕</button>
+    </div>
+  </div>
+  <div class="ww-sum-body">
+    <div class="ww-sum-title">大语言模型在现代软件工程中的崛起</div>
+    <div class="ww-sum-overview">大语言模型正在重塑软件开发流程，开发者日益依赖 AI 辅助来提升效率，但也面临可靠性和治理方面的挑战。</div>
+
+    <div class="ww-sum-section">
+      <div class="ww-sum-section-head">
+        <span class="ww-sum-section-dot"></span>
+        <span class="ww-sum-section-title">LLM 成为核心工具</span>
+      </div>
+      <div class="ww-sum-points">
+        <div class="ww-sum-point">大语言模型能处理和生成类人文本</div>
+        <div class="ww-sum-point">从代码补全到文档编写无所不包</div>
+      </div>
+    </div>
+
+    <div class="ww-sum-section">
+      <div class="ww-sum-section-head">
+        <span class="ww-sum-section-dot"></span>
+        <span class="ww-sum-section-title">开发范式转变</span>
+      </div>
+      <div class="ww-sum-points">
+        <div class="ww-sum-point">开发者越来越多地借助 AI 加速工作流</div>
+        <div class="ww-sum-point">手动编码向 AI 辅助编码转型</div>
+      </div>
+    </div>
+
+    <div class="ww-sum-section">
+      <div class="ww-sum-section-head">
+        <span class="ww-sum-section-dot"></span>
+        <span class="ww-sum-section-title">挑战与治理</span>
+      </div>
+      <div class="ww-sum-points">
+        <div class="ww-sum-point">代码可靠性和知识产权问题受到关注</div>
+        <div class="ww-sum-point">组织正在建立严格的治理框架</div>
+      </div>
+    </div>
+
+    <div class="ww-sum-section">
+      <div class="ww-sum-section-head">
+        <span class="ww-sum-section-dot"></span>
+        <span class="ww-sum-section-title">未来展望</span>
+      </div>
+      <div class="ww-sum-points">
+        <div class="ww-sum-point">预计 2028 年所有商业软件将融入 AI 开发</div>
+        <div class="ww-sum-point">LLM 采用率持续上升</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FAB -->
+<button class="ww-fab" style="bottom: 24px; right: 24px;">
+  <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+</button>
+
+</body>
+</html>

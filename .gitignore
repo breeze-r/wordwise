@@ -15,5 +15,7 @@ backend/data/ECDICT-master/
 *.sqlite3
 
 node_modules/
+package.json
+package-lock.json
 dist/
 build/

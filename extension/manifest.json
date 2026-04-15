@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WordWise",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "description": "阅读即学词 — 智能标注生词，间隔重复记忆",
   "permissions": ["storage", "activeTab", "tabs"],
   "host_permissions": ["http://*/*", "https://*/*"],

@@ -1,131 +1,197 @@
-# WordWise
+<p align="center">
+  <img src="extension/icons/icon128.png" width="80" height="80" alt="WordWise icon">
+</p>
 
-[中文说明](./README.zh-CN.md)
+<h1 align="center">WordWise</h1>
 
-![WordWise overview](./docs/wordwise-overview.svg)
+<p align="center">
+  <strong>Read to Learn English — Smart inline annotations for every webpage</strong>
+</p>
 
-WordWise is an open-source reading companion for English webpages.
-It annotates unfamiliar words inline, lets you inspect richer definitions on click, and keeps a lightweight local learning profile with optional spaced repetition.
+<p align="center">
+  <a href="./README.zh-CN.md">中文说明</a> &middot;
+  <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#features">Features</a> &middot;
+  <a href="https://github.com/breeze-r/wordwise/issues">Issues</a>
+</p>
 
-This repository currently ships as:
+<p align="center">
+  <img src="https://img.shields.io/github/license/breeze-r/wordwise?color=0d9488" alt="License">
+  <img src="https://img.shields.io/badge/manifest-v3-0d9488" alt="Manifest V3">
+  <img src="https://img.shields.io/badge/version-1.0.1-0d9488" alt="Version">
+</p>
 
-- A Chrome extension in [`extension/`](./extension)
-- A local FastAPI backend in [`backend/`](./backend)
-- A privacy-first BYOK flow where your model key stays in browser storage
+---
+
+<p align="center">
+  <img src="docs/hero-preview.png" width="960" alt="WordWise in action — inline annotations, detail panel, and AI summary sidebar">
+</p>
+
+## What is WordWise?
+
+WordWise is an open-source Chrome extension that helps you **learn English while reading**. It automatically detects unfamiliar words on any webpage, annotates them inline with Chinese translations, and provides detailed definitions on click.
+
+Unlike flashcard apps that require separate study sessions, WordWise turns your everyday browsing into a passive learning experience.
 
 ## Features
 
-- Inline annotations for unfamiliar English words while browsing
-- Local dictionary mode for fast offline-friendly lookups
-- Hybrid or remote LLM mode for context-aware translations
-- Click-to-open detail panel with POS, multiple senses, UK/US pronunciation, and English definitions
-- Vocabulary level filtering and optional domain-specific word packs
-- Vocabulary test and review endpoints for a lightweight learning loop
-- Anonymous local profile mode, no account required in the current version
+<table>
+<tr>
+<td width="50%">
+
+### Inline Annotations
+Words you don't know are annotated with concise Chinese translations right in the text flow. No popups, no interruptions.
+
+<img src="docs/annotation-preview.png" width="100%" alt="Inline annotation example">
+
+</td>
+<td width="50%">
+
+### Extension Popup
+Track your vocabulary stats, configure vocabulary level, enable domain-specific word packs, and manage LLM settings — all from the popup.
+
+<img src="docs/popup-preview.png" width="260" alt="Popup dashboard">
+
+</td>
+</tr>
+</table>
+
+### Core Capabilities
+
+- **Smart Word Detection** — Filters out common words based on your vocabulary level. Only annotates words you actually need to learn.
+- **Click-to-Expand Detail Panel** — Tap any annotated word to see phonetics, part-of-speech tags, multiple senses, and the word used in context.
+- **AI Article Summary** — One-click bilingual (Chinese/English) structured summary sidebar powered by LLM. Supports language switching (CN / EN / Bilingual).
+- **Three Translation Modes**:
+  - `Local Dictionary Only` — Offline-capable, powered by ECDICT (350k+ entries)
+  - `Hybrid` — Local dictionary first, LLM fills the gaps
+  - `Remote LLM Only` — Full AI-powered contextual translations
+- **Vocabulary Level Filtering** — Choose your level (middle school through postgrad) and words below that level won't be annotated.
+- **Domain Word Packs** — Enable specialized packs for GRE, TOEFL, Medical, Tech, Legal, Business, and more.
+- **BYOK (Bring Your Own Key)** — Your API key stays in browser local storage. It's only attached to translation requests, never stored on any server.
+- **Spaced Repetition** — Built-in vocabulary tracking with exposure-based review system.
+- **Privacy First** — No account required. All learning data stored locally.
 
 ## Architecture
 
-![WordWise architecture](./docs/wordwise-architecture.svg)
-
-## Project structure
-
-```text
-backend/
-  main.py
-  routers/
-  services/
-  scripts/
-extension/
-  manifest.json
-  background.js
-  content.js
-  popup.html
-  popup.js
-docs/
+```
+                  Chrome Extension                         Local Backend
+              ┌─────────────────────┐              ┌──────────────────────┐
+  Webpage ──> │  content.js         │   HTTP/JSON  │  FastAPI (Python)    │
+              │  - word detection   │ ──────────── │  - vocabulary DB     │
+              │  - inline annotate  │              │  - ECDICT lookup     │
+              │  - detail panel     │              │  - LLM proxy         │
+              │  - summary sidebar  │              │  - spaced repetition │
+              ├─────────────────────┤              └──────────────────────┘
+              │  background.js      │                        │
+              │  - API routing      │                  ┌─────┴─────┐
+              │  - config storage   │                  │ LLM API   │
+              ├─────────────────────┤                  │ (OpenAI,  │
+              │  popup.html/js      │                  │  Claude,  │
+              │  - settings UI      │                  │  etc.)    │
+              └─────────────────────┘                  └───────────┘
 ```
 
-## Quick start
+## Quick Start
 
-### 1. Run the backend locally
+### 1. Start the backend
 
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
+cp .env.example .env          # edit .env if needed
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The current extension build points to `http://localhost:8000`.
-
-### 2. Load the Chrome extension
+### 2. Load the extension
 
 1. Open `chrome://extensions`
-2. Enable Developer mode
-3. Click `Load unpacked`
+2. Enable **Developer mode** (top right)
+3. Click **Load unpacked**
 4. Select the `extension/` folder
 
-### 3. Configure translation mode
+### 3. Configure (optional)
 
-You can use:
+Open the extension popup and configure:
 
-- `Local dictionary only`
-- `Hybrid`
-- `Remote LLM only`
+| Setting | Description |
+|---------|-------------|
+| **Backend URL** | Default `http://localhost:8000`. Change if your backend runs elsewhere. |
+| **Translation Mode** | `Local Dictionary Only` / `Hybrid` / `Remote LLM Only` |
+| **LLM API URL** | e.g. `https://api.openai.com/v1/chat/completions` |
+| **Model** | e.g. `gpt-4o-mini`, `claude-sonnet-4-20250514`, etc. |
+| **API Key** | Your key. Stored locally, never sent to our servers. |
 
-When using an LLM mode, fill in:
+> **Tip:** You can use WordWise in `Local Dictionary Only` mode without any API key. It works great for basic translations using the built-in 350k-entry ECDICT dictionary.
 
-- API URL
-- model name
-- API key
+## Project Structure
 
-The key is stored locally in Chrome storage and attached only to reading requests.
-
-## Dictionary data
-
-The repo does **not** track large generated dictionary files.
-
-Ignored on purpose:
-
-- `backend/data/ecdict.db`
-- `backend/data/ecdict.csv`
-- `backend/data/ECDICT-master/`
-- local runtime databases such as `backend/wordwise.db`
-
-If you want richer local definitions, download ECDICT yourself and build the SQLite index:
-
-```bash
-cd backend
-source .venv/bin/activate
-python3 scripts/build_ecdict_index.py
+```
+wordwise/
+├── extension/           # Chrome extension (Manifest V3)
+│   ├── manifest.json
+│   ├── background.js    # Service worker, API routing
+│   ├── content.js       # Page annotation, detail panel, summary
+│   ├── content.css      # All annotation/panel/summary styles
+│   ├── popup.html/js    # Extension popup UI
+│   └── icons/           # Extension icons
+├── backend/             # FastAPI local backend
+│   ├── main.py          # App entry, CORS, router registration
+│   ├── routers/         # API endpoints
+│   │   ├── reading.py   # /scan, /lookup, /summarize
+│   │   ├── vocabulary.py
+│   │   ├── review.py
+│   │   ├── test.py
+│   │   └── dict_packs.py
+│   ├── services/        # Business logic
+│   │   ├── translator.py      # LLM integration
+│   │   ├── local_dictionary.py
+│   │   ├── frequency.py
+│   │   └── spaced_repetition.py
+│   ├── models.py        # SQLAlchemy ORM
+│   ├── settings.py      # Env config
+│   └── data/            # Dictionary data (not tracked)
+└── docs/                # Screenshots & diagrams
 ```
 
-You may also override the dictionary paths through `.env`.
+## Dictionary Data
 
-## Open source notes
+The repository does **not** include large dictionary files. To enable the full local dictionary:
 
-- License: MIT
-- ECDICT upstream data included in your own setup should keep its original license notice
-- This repository is currently local-first and developer-oriented
+1. Download [ECDICT](https://github.com/skywind3000/ECDICT)
+2. Place CSV data in `backend/data/`
+3. Build the SQLite index:
 
-## Current limitations
+```bash
+cd backend && python3 scripts/build_ecdict_index.py
+```
 
-- The extension still targets a local backend by default instead of a hosted public API
-- Some enriched word-detail fields are not persisted yet and may trigger repeated LLM lookups
-- Dynamic content rescanning is still conservative on heavily client-rendered pages
+## Tech Stack
 
-## Roadmap
+| Layer | Technology |
+|-------|-----------|
+| Extension | Chrome Manifest V3, vanilla JS, CSS |
+| Backend | Python 3.11+, FastAPI, SQLAlchemy, SQLite |
+| Dictionary | ECDICT (350k+ entries) |
+| LLM | Any OpenAI-compatible API (BYOK) |
 
-- Configurable backend base URL or hosted service
-- Better caching for enriched word details
-- Improved SPA / infinite-scroll rescanning
-- Chrome Web Store packaging flow
+## Contributing
 
-## Development tips
+Contributions are welcome! Feel free to open issues or submit PRs.
 
-- Extension UI: `extension/popup.html`, `extension/popup.js`
-- Page annotation logic: `extension/content.js`
-- Backend entry: `backend/main.py`
-- Reading pipeline: `backend/routers/reading.py`
-- Translator logic: `backend/services/translator.py`
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes
+4. Push to the branch
+5. Open a Pull Request
+
+## License
+
+[MIT](./LICENSE)
+
+---
+
+<p align="center">
+  <sub>Built with curiosity. Read more, learn more.</sub>
+</p>
