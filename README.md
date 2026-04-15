@@ -24,7 +24,7 @@
 ---
 
 <p align="center">
-  <img src="docs/hero-preview.png" width="960" alt="WordWise in action — inline annotations, detail panel, and AI summary sidebar">
+  <img src="docs/hero-preview.png?v=2" width="960" alt="WordWise in action — inline annotations, detail panel, and AI summary sidebar">
 </p>
 
 ## What is WordWise?
