@@ -24,7 +24,7 @@
 ---
 
 <p align="center">
-  <img src="docs/hero-preview.png?v=2" width="960" alt="WordWise 实际效果 — 行内标注、词义面板、AI 摘要侧边栏">
+  <img src="docs/hero.png" width="960" alt="WordWise 实际效果 — 行内标注、词义面板、AI 摘要侧边栏">
 </p>
 
 ## WordWise 是什么？
