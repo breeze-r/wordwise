@@ -143,6 +143,39 @@ Open the extension popup and configure:
 
 > **Tip:** You can use WordWise in `Local Dictionary Only` mode without any API key. It works great for basic translations using the built-in 350k-entry ECDICT dictionary.
 
+## Usage
+
+Once installed, just **browse any English webpage** — WordWise works automatically.
+
+### Reading with Annotations
+
+- Unfamiliar words are annotated inline with small Chinese translations (teal colored)
+- Words are filtered by your vocabulary level — common words you already know won't be annotated
+- Annotations appear automatically, no action needed
+
+### Looking Up a Word
+
+- **Click** any annotated word to open the detail panel
+- See phonetics, part-of-speech, multiple definitions, and the word in its original context
+- Click **"加入生词本"** to save it, or **"认识"** to mark it as known
+
+### AI Article Summary
+
+- On articles with enough text, a **floating button** (bottom-right corner) appears after 2 seconds
+- Click it to generate a bilingual structured outline
+- Switch between **Chinese / English / Bilingual** display using the toggle buttons
+- The summary includes: title, overview, and section-by-section bullet points
+
+### Popup Dashboard
+
+Click the WordWise icon in the Chrome toolbar to:
+
+- View your vocabulary stats (total / new / learning / mastered)
+- Toggle the extension on/off
+- Set your English level to control which words get annotated
+- Enable domain-specific word packs (GRE, TOEFL, Medical, Tech, etc.)
+- Configure the backend URL and LLM translation settings
+
 ## Project Structure
 
 ```
