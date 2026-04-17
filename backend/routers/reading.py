@@ -117,11 +117,11 @@ def _apply_annotation_exposure(vocab: UserVocabulary, page_session_id: str | Non
     if page_session_id and vocab.last_exposure_session_id == page_session_id:
         return
 
-    if vocab.exposure_remaining is None:
+    if vocab.exposure_remaining is None or vocab.exposure_remaining < 0:
         vocab.exposure_limit = vocab.exposure_limit or DEFAULT_EXPOSURE_LIMIT
         vocab.exposure_remaining = vocab.exposure_limit
 
-    vocab.exposure_remaining = max(0, vocab.exposure_remaining - 1)
+    vocab.exposure_remaining = max(0, (vocab.exposure_remaining or 0) - 1)
     vocab.annotation_count = (vocab.annotation_count or 0) + 1
     if page_session_id:
         vocab.last_exposure_session_id = page_session_id

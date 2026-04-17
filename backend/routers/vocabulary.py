@@ -78,15 +78,19 @@ async def encounter_batch(
     db: AsyncSession = Depends(get_db),
 ):
     count = 0
+    # Batch load existing vocab to avoid N+1 queries
+    lemmas = [w.lemma.lower().strip() for w in body.words]
+    result = await db.execute(
+        select(UserVocabulary).where(
+            UserVocabulary.user_id == user.id,
+            UserVocabulary.lemma.in_(lemmas),
+        )
+    )
+    vocab_map = {v.lemma: v for v in result.scalars().all()}
+
     for word in body.words:
         lemma = word.lemma.lower().strip()
-        result = await db.execute(
-            select(UserVocabulary).where(
-                UserVocabulary.user_id == user.id,
-                UserVocabulary.lemma == lemma,
-            )
-        )
-        vocab = result.scalar_one_or_none()
+        vocab = vocab_map.get(lemma)
 
         if vocab:
             vocab.encounter_count += 1
@@ -226,15 +230,15 @@ async def vocabulary_stats(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    counts = {}
-    for s in WordStatus:
-        result = await db.execute(
-            select(func.count()).select_from(UserVocabulary).where(
-                UserVocabulary.user_id == user.id,
-                UserVocabulary.status == s,
-            )
-        )
-        counts[s.value] = result.scalar()
+    # Single GROUP BY query instead of 7 separate COUNT queries
+    result = await db.execute(
+        select(UserVocabulary.status, func.count())
+        .where(UserVocabulary.user_id == user.id)
+        .group_by(UserVocabulary.status)
+    )
+    counts = {s.value: 0 for s in WordStatus}
+    for status, cnt in result.all():
+        counts[status.value if hasattr(status, 'value') else status] = cnt
 
     return {
         "estimated_vocabulary": user.estimated_vocabulary,

@@ -156,22 +156,50 @@
 #ww-detail .ww-dt-meanings {
   margin-bottom: 10px;
 }
+#ww-detail .ww-dt-meanings-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+  letter-spacing: 0.2px;
+}
 #ww-detail .ww-dt-meaning-item {
   font-size: 13px;
   color: #334155;
-  padding-left: 14px;
+  padding: 4px 10px 4px 14px;
+  margin: 2px 0;
   position: relative;
   line-height: 1.65;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 #ww-detail .ww-dt-meaning-item::before {
   content: "";
   position: absolute;
-  left: 2px;
-  top: 9px;
+  left: 4px;
+  top: 13px;
   width: 4px;
   height: 4px;
   border-radius: 50%;
   background: #0d9488;
+}
+#ww-detail .ww-dt-meaning-item:hover {
+  background: #f0fdfa;
+  color: #0d9488;
+}
+#ww-detail .ww-dt-meaning-item.is-current {
+  background: #ccfbf1;
+  color: #0f766e;
+  font-weight: 500;
+  cursor: default;
+  padding-left: 10px;
+}
+#ww-detail .ww-dt-meaning-item.is-current::before {
+  display: none;
+}
+#ww-detail .ww-dt-meaning-item.is-current:hover {
+  background: #ccfbf1;
+  color: #0f766e;
 }
 
 /* English definitions box */

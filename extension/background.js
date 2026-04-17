@@ -84,9 +84,16 @@ async function apiRequest(path, options = {}) {
   }
 
   const apiBase = await getApiBase();
-  const res = await fetch(`${apiBase}${path}`, { ...options, headers });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  let res;
+  try {
+    res = await fetch(`${apiBase}${path}`, { ...options, headers, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!res.ok) {
-    const text = await res.text();
+    const text = (await res.text()).slice(0, 200);
     const error = new Error(`API ${res.status}: ${text}`);
     error.status = res.status;
     throw error;
@@ -97,7 +104,7 @@ async function apiRequest(path, options = {}) {
 // === Message handler from content script / popup ===
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   handleMessage(msg, sender).then(sendResponse).catch((err) => {
-    sendResponse({ error: err.message });
+    sendResponse({ error: err?.message || String(err) });
   });
   return true; // async response
 });
@@ -190,7 +197,8 @@ async function handleMessage(msg) {
     }
     case "get_llm_status": {
       const { llmOk } = await chrome.storage.local.get("llmOk");
-      return { ok: llmOk !== false };
+      // Return actual stored value; undefined means "never tested"
+      return { ok: llmOk === true, known: typeof llmOk === "boolean" };
     }
 
     // --- Reading scan (combined filter + translate) ---

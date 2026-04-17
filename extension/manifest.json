@@ -4,7 +4,8 @@
   "version": "1.0.1",
   "description": "阅读即学词 — 智能标注生词，间隔重复记忆",
   "permissions": ["storage", "activeTab", "tabs"],
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "host_permissions": ["http://localhost/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "background.js"
   },

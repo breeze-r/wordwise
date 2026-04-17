@@ -140,15 +140,16 @@ async def _chat_completion(
     if config.mode == "local_wordbook":
         return None
     if not config.api_key or not config.api_url or not config.model:
-        logger.warning(
-            "[translator] LLM not configured (mode=%s, url=%s, model=%s, key=%s). "
-            "Set via .env or popup settings.",
-            config.mode,
-            config.api_url or "(empty)",
-            config.model or "(empty)",
-            "set" if config.api_key else "(empty)",
-        )
-        return None
+        missing = []
+        if not config.api_key:
+            missing.append("API Key")
+        if not config.api_url:
+            missing.append("API URL")
+        if not config.model:
+            missing.append("模型名称")
+        detail = f"LLM 配置不完整，缺少：{', '.join(missing)}。请在插件弹窗中设置。"
+        logger.warning("[translator] %s", detail)
+        return {"_error": detail}
 
     logger.info(
         "[translator] LLM request: url=%s model=%s prompt_len=%d",
@@ -160,9 +161,7 @@ async def _chat_completion(
     last_error_detail: str | None = None
     for attempt in range(1 + max_retries):
         try:
-            # 绕开系统代理直连 LLM API，避免代理节点不稳定导致超时
-            transport = httpx.AsyncHTTPTransport(proxy=None)
-            async with httpx.AsyncClient(timeout=30.0, transport=transport) as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
                     config.api_url,
                     headers={
@@ -294,7 +293,7 @@ async def _batch_chinese_fallback(
 {chr(10).join(lines)}"""
 
     result = await _chat_completion(prompt, overrides=overrides)
-    if not isinstance(result, dict):
+    if not isinstance(result, dict) or "_error" in result:
         return {}
     return {str(k).lower(): str(v).strip() for k, v in result.items() if v}
 
@@ -374,13 +373,19 @@ async def batch_translate(
     prompt = "\n".join(prompt_parts)
 
     result = await _chat_completion(prompt, overrides=overrides)
-    if not isinstance(result, dict):
+    # Treat error dicts (from failed LLM calls) and non-dict results as failures
+    llm_failed = not isinstance(result, dict) or "_error" in result
+    if llm_failed:
+        err_detail = result.get("_error") if isinstance(result, dict) else None
         if config.mode == "remote":
-            logger.warning("[translator] LLM paragraph translation failed in remote mode.")
+            logger.warning(
+                "[translator] LLM paragraph translation failed in remote mode: %s",
+                err_detail or "unknown",
+            )
             return {"_translations": {}, "_llm_ok": False}
         logger.info(
-            "[translator] LLM unavailable; falling back to %d local entries.",
-            len(local_results),
+            "[translator] LLM unavailable (%s); falling back to %d local entries.",
+            err_detail or "unknown", len(local_results),
         )
         return {"_translations": local_results, "_llm_ok": False}
 

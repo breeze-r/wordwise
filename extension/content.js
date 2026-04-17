@@ -274,11 +274,15 @@
       .replaceAll("'", "&#39;");
   }
 
+  function escapeRegExpChars(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
   function highlightWord(text, word) {
     const source = String(text || "");
     if (!source || !word) return escapeHtml(source);
 
-    const regex = new RegExp(`\\b(${word})\\b`, "gi");
+    const regex = new RegExp(`\\b(${escapeRegExpChars(word)})\\b`, "gi");
     let lastIndex = 0;
     let html = "";
     let match;
@@ -494,18 +498,27 @@
     const panel = ensureDetailPanel();
     currentDetailWord = word;
 
+    const ew = escapeHtml(word);
     const meaningItems = normalizeMeanings(meanings);
     const headingMeaning = brief || meaningItems[0] || word;
-    const detailMeaningItems = meaningItems.filter((item, index) => !(index === 0 && item === headingMeaning));
-    const detailMeaningsHtml = !loading && detailMeaningItems.length
-      ? `<div class="ww-dt-meanings">${detailMeaningItems
-          .map((item) => `<div class="ww-dt-meaning-item">${escapeHtml(item)}</div>`)
-          .join("")}</div>`
+    // Build the full alternative list: include current heading + all other meanings, dedup
+    const allMeanings = [headingMeaning, ...meaningItems.filter((m) => m && m !== headingMeaning)];
+    const uniqueMeanings = Array.from(new Set(allMeanings.filter(Boolean)));
+    const detailMeaningsHtml = !loading && uniqueMeanings.length > 1
+      ? `<div class="ww-dt-meanings">
+          <div class="ww-dt-meanings-hint">点击切换当前释义</div>
+          ${uniqueMeanings
+            .map((item) => {
+              const isCurrent = item === headingMeaning;
+              const label = isCurrent ? "✓ " : "";
+              return `<div class="ww-dt-meaning-item${isCurrent ? " is-current" : ""}" data-meaning="${escapeHtml(item)}" data-word="${ew}">${label}${escapeHtml(item)}</div>`;
+            })
+            .join("")}
+        </div>`
       : "";
 
     // Phonetics — always show both UK & US speaker buttons (Youdao supports any word)
     const speakerSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`;
-    const ew = escapeHtml(word);
     const ukText = phoneticUk ? ` ${escapeHtml(phoneticUk)}` : "";
     const usText = phoneticUs ? ` ${escapeHtml(phoneticUs)}` : (phonetic ? ` ${escapeHtml(phonetic)}` : "");
     const phoneticHtml = `<div class="ww-dt-phonetics">
@@ -746,6 +759,37 @@
         return;
       }
 
+      // Click on an alternative meaning item → switch the inline translation
+      const meaningItem = event.target.closest("#ww-detail .ww-dt-meaning-item");
+      if (meaningItem && !meaningItem.classList.contains("is-current")) {
+        event.preventDefault();
+        event.stopPropagation();
+        const w = meaningItem.dataset.word;
+        const m = meaningItem.dataset.meaning;
+        changeAnnotationMeaning(w, m);
+        // Re-render the panel so the new meaning shows as "current"
+        const entry = getAnnotationEntry(w);
+        if (entry) {
+          renderDetailPanel({
+            word: w,
+            brief: entry.brief,
+            pos: entry.pos,
+            phonetic: entry.phonetic,
+            phoneticUk: entry.phoneticUk,
+            phoneticUs: entry.phoneticUs,
+            meanings: entry.meanings,
+            definitionEn: entry.definitionEn,
+            sentenceZh: entry.sentenceZh,
+            exposureRemaining: entry.exposureRemaining,
+            manualLookupCount: entry.manualLookupCount,
+          });
+          // Keep panel anchored to the annotation on page
+          const anchor = document.querySelector(`.ww-cn[data-ww-word="${w}"]`);
+          if (anchor) positionDetailPanel(anchor.getBoundingClientRect());
+        }
+        return;
+      }
+
       const btn = event.target.closest("#ww-detail button[data-action]");
       if (btn) {
         event.preventDefault();
@@ -793,6 +837,46 @@
   function removeAnnotation(word) {
     document.querySelectorAll(`.ww-cn[data-ww-word="${word}"]`).forEach((el) => el.remove());
     delete annotationMap[word];
+  }
+
+  /** 切换某个词在文本中显示的中文释义 */
+  function changeAnnotationMeaning(word, newMeaning) {
+    if (!word || !newMeaning) return;
+    const lemma = word.toLowerCase();
+
+    // 1. 更新页面上所有该词的标注
+    document.querySelectorAll(`.ww-cn[data-ww-word="${lemma}"]`).forEach((el) => {
+      el.textContent = `(${newMeaning})`;
+      el.dataset.wwChinese = newMeaning;
+    });
+
+    // 2. 更新本地 annotationMap（brief 作为当前显示的释义）
+    const existing = getAnnotationEntry(lemma);
+    if (existing) {
+      const meanings = Array.isArray(existing.meanings) ? existing.meanings.slice() : [];
+      // 把新释义放到首位，旧的 brief 加到 meanings 里（如果没有的话）
+      if (existing.brief && existing.brief !== newMeaning && !meanings.includes(existing.brief)) {
+        meanings.unshift(existing.brief);
+      }
+      const deduped = Array.from(new Set([newMeaning, ...meanings.filter((m) => m !== newMeaning)]));
+      annotationMap[lemma] = {
+        ...existing,
+        brief: newMeaning,
+        meanings: deduped,
+      };
+    } else {
+      annotationMap[lemma] = { brief: newMeaning, meanings: [newMeaning] };
+    }
+
+    // 3. 持久化到后端（更新该词的主释义）
+    void sendMsg({
+      type: "encounter_word",
+      word: {
+        lemma,
+        definition_cn: newMeaning,
+        source_url: window.location.href,
+      },
+    });
   }
 
   function clearAllAnnotations() {

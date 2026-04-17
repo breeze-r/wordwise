@@ -14,6 +14,23 @@ function sendMsg(msg) {
   });
 }
 
+// === Host permission helper ===
+async function ensureHostPermission(url) {
+  if (!url || !url.trim()) return true;
+  try {
+    const urlObj = new URL(url.trim());
+    // localhost is already granted via manifest host_permissions
+    if (urlObj.hostname === "localhost" || urlObj.hostname === "127.0.0.1") return true;
+    const origin = `${urlObj.protocol}//${urlObj.host}/*`;
+    const has = await chrome.permissions.contains({ origins: [origin] });
+    if (has) return true;
+    // Request permission (must be in user gesture context, e.g. click handler)
+    return await chrome.permissions.request({ origins: [origin] });
+  } catch (e) {
+    return false;
+  }
+}
+
 function showView(view) {
   $("loadingView").style.display = "none";
   $("dashboardView").style.display = "none";
@@ -48,7 +65,11 @@ function renderLevelChips() {
     const chip = document.createElement("span");
     chip.className = "chip" + (lvl.key === currentVocabLevel ? " active" : "");
     chip.dataset.level = lvl.key;
-    chip.innerHTML = `${lvl.label}<span class="chip-count">${lvl.word_count.toLocaleString()}</span>`;
+    chip.textContent = lvl.label;
+    const countSpan = document.createElement("span");
+    countSpan.className = "chip-count";
+    countSpan.textContent = lvl.word_count.toLocaleString();
+    chip.appendChild(countSpan);
     chip.addEventListener("click", () => onLevelClick(lvl.key));
     grid.appendChild(chip);
   }
@@ -112,10 +133,16 @@ function renderPackChips() {
     chip.className = "pack-chip" + (isActive ? " active" : "");
     chip.dataset.packId = pack.id;
     chip.title = pack.description;
-    chip.innerHTML =
-      `<span class="pack-icon">${pack.icon}</span>` +
-      `${pack.name}` +
-      `<span class="pack-count">${pack.word_count}</span>`;
+    const iconSpan = document.createElement("span");
+    iconSpan.className = "pack-icon";
+    // pack.icon is trusted SVG markup from our own backend config
+    iconSpan.innerHTML = pack.icon;
+    chip.appendChild(iconSpan);
+    chip.appendChild(document.createTextNode(pack.name));
+    const countSpan = document.createElement("span");
+    countSpan.className = "pack-count";
+    countSpan.textContent = pack.word_count;
+    chip.appendChild(countSpan);
     chip.addEventListener("click", () => onPackToggle(pack.id));
     grid.appendChild(chip);
   }
@@ -217,21 +244,39 @@ async function loadTranslatorConfig() {
 async function init() {
   showView("loading");
   await loadDashboard();
+
+  // Listen for LLM status changes from scan results
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.llmOk) {
+      const v = changes.llmOk.newValue;
+      if (typeof v !== "boolean") updateLlmStatus("unknown");
+      else updateLlmStatus(v ? "ok" : "error");
+    }
+  });
 }
 
 // === Dashboard ===
-function updateLlmStatus(ok) {
+// status: "ok" | "error" | "unknown"
+function updateLlmStatus(status) {
   const wrap = $("llmStatus");
   const dot = $("llmDot");
   const text = $("llmStatusText");
   if (!wrap) return;
 
+  // Backward compat: accept boolean
+  if (typeof status === "boolean") status = status ? "ok" : "error";
+
   wrap.classList.add("active");
-  wrap.classList.toggle("ok", ok);
-  dot.className = "llm-dot " + (ok ? "ok" : "error");
-  text.textContent = ok
-    ? "AI 翻译服务正常运行中"
-    : "AI 翻译服务未连接 — 当前使用本地词典，请检查下方 LLM 设置";
+  wrap.classList.toggle("ok", status === "ok");
+  dot.className = "llm-dot " + (status === "ok" ? "ok" : status === "error" ? "error" : "unknown");
+
+  if (status === "ok") {
+    text.textContent = "AI 翻译服务正常运行中";
+  } else if (status === "error") {
+    text.textContent = "AI 翻译服务未连接 — 当前使用本地词典，请检查下方 LLM 设置";
+  } else {
+    text.textContent = "AI 翻译服务状态未知 — 打开任一英文网页触发检测";
+  }
 }
 
 async function loadDashboard() {
@@ -281,7 +326,11 @@ async function loadDashboard() {
 
   // LLM 状态呼吸灯
   const llmStatus = await sendMsg({ type: "get_llm_status" });
-  updateLlmStatus(llmStatus?.ok !== false);
+  if (!llmStatus?.known) {
+    updateLlmStatus("unknown");
+  } else {
+    updateLlmStatus(llmStatus.ok ? "ok" : "error");
+  }
 }
 
 // === Toggle ===
@@ -297,6 +346,15 @@ async function saveBackendUrl() {
   const url = $("backendUrl").value.trim();
   const statusEl = $("backendStatus");
   if (!url) return;
+
+  // Request host permission for non-localhost URLs
+  const granted = await ensureHostPermission(url);
+  if (!granted) {
+    statusEl.textContent = "需要授权访问该地址，请重试并在弹出的对话框中确认";
+    statusEl.style.color = "#e53935";
+    return;
+  }
+
   statusEl.textContent = "保存中...";
   statusEl.style.color = "#777";
   await sendMsg({ type: "set_api_base", apiBase: url });
@@ -316,6 +374,15 @@ $("saveSettingsBtn").addEventListener("click", async () => {
     return;
   }
 
+  // Request host permission for non-localhost LLM API URL
+  if (config.mode !== "local_wordbook" && config.apiUrl) {
+    const granted = await ensureHostPermission(config.apiUrl);
+    if (!granted) {
+      setSettingsStatus("需要授权访问 LLM API 地址，请重试并在弹出的对话框中确认", true);
+      return;
+    }
+  }
+
   setSettingsStatus("保存中...");
   const result = await sendMsg({ type: "set_translator_config", config });
   if (result?.error) {
@@ -328,7 +395,11 @@ $("saveSettingsBtn").addEventListener("click", async () => {
 
   // 保存后重置状态为"待验证"，下次扫描会更新
   if (result.mode === "local_wordbook") {
-    updateLlmStatus(true);
+    updateLlmStatus("ok");
+  } else {
+    // Clear stored status so it's re-detected on next scan
+    await chrome.storage.local.remove("llmOk");
+    updateLlmStatus("unknown");
   }
 });
 
