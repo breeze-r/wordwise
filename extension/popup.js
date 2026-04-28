@@ -227,7 +227,17 @@ async function loadBackendUrl() {
   const baseResult = await sendMsg({ type: "get_api_base" });
   if (baseResult?.apiBase) {
     $("backendUrl").value = baseResult.apiBase;
+    $("backendUrlText").textContent = baseResult.apiBase.replace(/^https?:\/\//, "");
   }
+}
+
+function updateBackendStatus(state, message) {
+  // state: "ok" | "error" | "checking"
+  const dot = $("backendDot");
+  const text = $("backendText");
+  if (!dot || !text) return;
+  dot.className = "backend-dot" + (state === "ok" ? " ok" : state === "error" ? " error" : "");
+  text.textContent = message || (state === "ok" ? "后端服务正常" : state === "error" ? "后端无法连接" : "后端连接中…");
 }
 
 async function loadTranslatorConfig() {
@@ -287,12 +297,17 @@ async function loadDashboard() {
   setSettingsStatus("");
 
   // Load local profile
+  await loadBackendUrl();
+  updateBackendStatus("checking");
   const user = await sendMsg({ type: "get_user" });
   if (user.error) {
-    setSettingsStatus("无法连接本地后端，请确认服务已启动。", true);
+    updateBackendStatus("error", "后端无法连接 — 请检查服务是否启动");
     $("statVocab").textContent = "-";
+    // Auto-open the edit panel so user can fix the URL right away
+    openBackendEditPanel(true);
     return;
   }
+  updateBackendStatus("ok", "后端服务正常");
   // 词汇量先占位，等等级数据加载后同步
   $("statVocab").textContent = user.estimated_vocabulary || "-";
 
@@ -345,6 +360,27 @@ $("enableToggle").addEventListener("click", async () => {
 });
 
 // === Backend URL ===
+function openBackendEditPanel(open) {
+  const panel = $("backendEditPanel");
+  const btn = $("backendEditBtn");
+  if (!panel || !btn) return;
+  if (open) {
+    panel.hidden = false;
+    btn.classList.add("is-open");
+  } else {
+    panel.hidden = true;
+    btn.classList.remove("is-open");
+  }
+}
+
+$("backendEditBtn").addEventListener("click", () => {
+  const panel = $("backendEditPanel");
+  openBackendEditPanel(panel?.hidden);
+  if (panel && !panel.hidden) {
+    setTimeout(() => $("backendUrl")?.focus(), 50);
+  }
+});
+
 async function saveBackendUrl() {
   const url = $("backendUrl").value.trim();
   const statusEl = $("backendStatus");
@@ -361,8 +397,17 @@ async function saveBackendUrl() {
   statusEl.textContent = "保存中...";
   statusEl.style.color = "#777";
   await sendMsg({ type: "set_api_base", apiBase: url });
-  statusEl.textContent = "已保存，重新打开页面生效";
-  statusEl.style.color = "#4caf50";
+  $("backendUrlText").textContent = url.replace(/^https?:\/\//, "");
+  statusEl.textContent = "✓ 已保存，刷新网页生效";
+  statusEl.style.color = "#0d9488";
+  // Re-probe the new backend
+  updateBackendStatus("checking", "检查新地址中…");
+  const user = await sendMsg({ type: "get_user" });
+  if (user.error) {
+    updateBackendStatus("error", "新地址无法连接");
+  } else {
+    updateBackendStatus("ok", "后端服务正常");
+  }
 }
 $("backendUrl").addEventListener("change", saveBackendUrl);
 
