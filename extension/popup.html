@@ -77,22 +77,6 @@
     margin-top: 1px;
     font-weight: 400;
   }
-  .header-actions {
-    position: relative; z-index: 1;
-  }
-  .mode-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    background: rgba(255,255,255,0.15);
-    border: 1px solid rgba(255,255,255,0.22);
-    color: rgba(255,255,255,0.95);
-    font-size: 11px;
-    padding: 5px 10px;
-    border-radius: 999px;
-    backdrop-filter: blur(4px);
-  }
-
   /* ── Loading ── */
   .loading {
     text-align: center;
@@ -481,9 +465,6 @@
           <p>Read to Learn English</p>
         </div>
       </div>
-      <div class="header-actions">
-        <span class="mode-badge">本地模式</span>
-      </div>
     </div>
   </div>
 
@@ -567,8 +548,8 @@
         </select>
       </div>
       <div>
-        <label for="translatorApiUrl">LLM API 地址</label>
-        <input id="translatorApiUrl" type="text" placeholder="https://api.example.com/v1/chat/completions" />
+        <label for="translatorApiUrl">LLM API 地址 / Base URL</label>
+        <input id="translatorApiUrl" type="text" placeholder="https://integrate.api.nvidia.com/v1" />
       </div>
       <div>
         <label for="translatorModel">模型名称</label>

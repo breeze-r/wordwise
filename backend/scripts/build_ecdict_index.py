@@ -112,7 +112,8 @@ def main() -> None:
                 brief TEXT NOT NULL,
                 pos TEXT,
                 phonetic TEXT,
-                meanings_json TEXT
+                meanings_json TEXT,
+                definition_en TEXT
             );
             """
         )
@@ -140,14 +141,15 @@ def main() -> None:
                         pos,
                         phonetic,
                         json.dumps(meanings, ensure_ascii=False),
+                        definition,
                     )
                 )
                 count += 1
 
             conn.executemany(
                 "INSERT OR REPLACE INTO entries "
-                "(word, brief, pos, phonetic, meanings_json) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "(word, brief, pos, phonetic, meanings_json, definition_en) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
                 rows,
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_entries_word ON entries(word)")

@@ -62,8 +62,12 @@ class UserVocabulary(Base):
     source_url = Column(String(2048), nullable=True)
     definition_cn = Column(Text, nullable=True)
     phonetic = Column(String(100), nullable=True)
+    phonetic_uk = Column(String(100), nullable=True)
+    phonetic_us = Column(String(100), nullable=True)
     pos = Column(String(20), nullable=True)  # 词性
     meanings_json = Column(Text, nullable=True)
+    definition_en_json = Column(Text, nullable=True)
+    sentence_zh = Column(Text, nullable=True)
 
     # 时间
     first_seen_at = Column(DateTime, default=datetime.utcnow)

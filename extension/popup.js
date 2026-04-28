@@ -249,15 +249,16 @@ async function init() {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && changes.llmOk) {
       const v = changes.llmOk.newValue;
+      const detail = changes.llmError?.newValue || "";
       if (typeof v !== "boolean") updateLlmStatus("unknown");
-      else updateLlmStatus(v ? "ok" : "error");
+      else updateLlmStatus(v ? "ok" : "error", detail);
     }
   });
 }
 
 // === Dashboard ===
 // status: "ok" | "error" | "unknown"
-function updateLlmStatus(status) {
+function updateLlmStatus(status, detail = "") {
   const wrap = $("llmStatus");
   const dot = $("llmDot");
   const text = $("llmStatusText");
@@ -273,7 +274,9 @@ function updateLlmStatus(status) {
   if (status === "ok") {
     text.textContent = "AI 翻译服务正常运行中";
   } else if (status === "error") {
-    text.textContent = "AI 翻译服务未连接 — 当前使用本地词典，请检查下方 LLM 设置";
+    text.textContent = detail
+      ? `AI 翻译服务未连接 — ${String(detail).slice(0, 80)}`
+      : "AI 翻译服务未连接 — 当前使用本地词典，请检查下方 LLM 设置";
   } else {
     text.textContent = "AI 翻译服务状态未知 — 打开任一英文网页触发检测";
   }
@@ -329,7 +332,7 @@ async function loadDashboard() {
   if (!llmStatus?.known) {
     updateLlmStatus("unknown");
   } else {
-    updateLlmStatus(llmStatus.ok ? "ok" : "error");
+    updateLlmStatus(llmStatus.ok ? "ok" : "error", llmStatus.error || "");
   }
 }
 

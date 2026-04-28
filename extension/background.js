@@ -85,10 +85,16 @@ async function apiRequest(path, options = {}) {
 
   const apiBase = await getApiBase();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
+  const timeoutMs = path === "/api/reading/summarize" ? 90000 : 45000;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let res;
   try {
     res = await fetch(`${apiBase}${path}`, { ...options, headers, signal: controller.signal });
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      throw new Error(`请求超时：${Math.round(timeoutMs / 1000)} 秒内没有收到后端响应`);
+    }
+    throw err;
   } finally {
     clearTimeout(timeout);
   }
@@ -107,6 +113,101 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ error: err?.message || String(err) });
   });
   return true; // async response
+});
+
+// === Port-based streaming: SSE summary ===
+// Content script opens chrome.runtime.connect({name:"ww-summarize"}) and posts
+// {text, pageUrl}. We fetch the SSE endpoint and forward each parsed event back
+// over the port: {type:"meta"|"section"|"done"|"error", data:{...}}.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "ww-summarize") return;
+
+  let aborter = null;
+  let closed = false;
+
+  const safePost = (msg) => {
+    if (closed) return;
+    try { port.postMessage(msg); } catch { /* port already gone */ }
+  };
+
+  port.onDisconnect.addListener(() => {
+    closed = true;
+    if (aborter) {
+      try { aborter.abort(); } catch { /* noop */ }
+    }
+  });
+
+  port.onMessage.addListener(async (msg) => {
+    if (!msg || msg.type !== "start") return;
+    if (aborter) return; // already running
+    aborter = new AbortController();
+
+    try {
+      const apiBase = await getApiBase();
+      const translatorConfig = await getTranslatorConfig();
+      const headers = {
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+        "X-WordWise-Translator-Mode": translatorConfig.mode,
+        "X-WordWise-Translator-Api-Url": translatorConfig.apiUrl,
+        "X-WordWise-Translator-Model": translatorConfig.model,
+      };
+      if (translatorConfig.apiKey) {
+        headers["X-WordWise-Translator-Key"] = translatorConfig.apiKey;
+      }
+
+      const res = await fetch(`${apiBase}/api/reading/summarize/stream`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ text: msg.text, page_url: msg.pageUrl }),
+        signal: aborter.signal,
+      });
+
+      if (!res.ok) {
+        const body = (await res.text()).slice(0, 300);
+        safePost({ type: "error", data: { message: `API ${res.status}: ${body}` } });
+        try { port.disconnect(); } catch { /* noop */ }
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buf = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+
+        // SSE frames are separated by a blank line ("\n\n").
+        let sep;
+        while ((sep = buf.indexOf("\n\n")) !== -1) {
+          const frame = buf.slice(0, sep);
+          buf = buf.slice(sep + 2);
+          // Each frame may have multiple "data:" lines; concatenate them.
+          const dataLines = [];
+          for (const rawLine of frame.split("\n")) {
+            if (rawLine.startsWith("data:")) {
+              dataLines.push(rawLine.slice(5).trimStart());
+            }
+          }
+          if (!dataLines.length) continue;
+          const payload = dataLines.join("\n");
+          try {
+            safePost(JSON.parse(payload));
+          } catch {
+            // ignore malformed frame
+          }
+        }
+      }
+    } catch (err) {
+      if (err?.name !== "AbortError") {
+        safePost({ type: "error", data: { message: err?.message || String(err) } });
+      }
+    } finally {
+      try { port.disconnect(); } catch { /* noop */ }
+    }
+  });
 });
 
 async function handleMessage(msg) {
@@ -196,9 +297,9 @@ async function handleMessage(msg) {
       return { ok: true };
     }
     case "get_llm_status": {
-      const { llmOk } = await chrome.storage.local.get("llmOk");
+      const { llmOk, llmError } = await chrome.storage.local.get(["llmOk", "llmError"]);
       // Return actual stored value; undefined means "never tested"
-      return { ok: llmOk === true, known: typeof llmOk === "boolean" };
+      return { ok: llmOk === true, known: typeof llmOk === "boolean", error: llmError || "" };
     }
 
     // --- Reading scan (combined filter + translate) ---
@@ -213,7 +314,10 @@ async function handleMessage(msg) {
       });
       // 持久化 LLM 状态
       if (scanResult && typeof scanResult.llm_ok === "boolean") {
-        await chrome.storage.local.set({ llmOk: scanResult.llm_ok });
+        await chrome.storage.local.set({
+          llmOk: scanResult.llm_ok,
+          llmError: scanResult.llm_error || "",
+        });
       }
       return scanResult;
     }

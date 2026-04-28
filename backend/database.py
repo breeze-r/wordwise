@@ -24,6 +24,10 @@ USER_VOCABULARY_COLUMN_MIGRATIONS = {
     "manual_lookup_count": "ALTER TABLE user_vocabulary ADD COLUMN manual_lookup_count INTEGER DEFAULT 0",
     "last_exposure_session_id": "ALTER TABLE user_vocabulary ADD COLUMN last_exposure_session_id VARCHAR(100)",
     "last_manual_lookup_at": "ALTER TABLE user_vocabulary ADD COLUMN last_manual_lookup_at DATETIME",
+    "phonetic_uk": "ALTER TABLE user_vocabulary ADD COLUMN phonetic_uk VARCHAR(100)",
+    "phonetic_us": "ALTER TABLE user_vocabulary ADD COLUMN phonetic_us VARCHAR(100)",
+    "definition_en_json": "ALTER TABLE user_vocabulary ADD COLUMN definition_en_json TEXT",
+    "sentence_zh": "ALTER TABLE user_vocabulary ADD COLUMN sentence_zh TEXT",
 }
 
 
@@ -107,8 +111,14 @@ async def init_db():
                 primary.source_url = primary.source_url or extra.source_url
                 primary.definition_cn = primary.definition_cn or extra.definition_cn
                 primary.phonetic = primary.phonetic or extra.phonetic
+                primary.phonetic_uk = primary.phonetic_uk or extra.phonetic_uk
+                primary.phonetic_us = primary.phonetic_us or extra.phonetic_us
                 primary.pos = primary.pos or extra.pos
                 primary.meanings_json = primary.meanings_json or extra.meanings_json
+                primary.definition_en_json = (
+                    primary.definition_en_json or extra.definition_en_json
+                )
+                primary.sentence_zh = primary.sentence_zh or extra.sentence_zh
                 primary.last_clicked_translation = bool(
                     primary.last_clicked_translation or extra.last_clicked_translation
                 )

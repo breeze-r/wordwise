@@ -14,6 +14,9 @@
   let detailPanel = null;
   let selectionLookupTimer = null;
   let currentDetailWord = null;
+  let isScanning = false;
+  let scanQueued = false;
+  let scannedWords = new Set();
 
   // === 基础过滤：前端先过滤掉明显不需要翻译的词 ===
   const SKIP = new Set([
@@ -218,17 +221,68 @@
     return text.slice(start, end).trim().slice(0, 200);
   }
 
+  /**
+   * 识别专有名词（人名、地名、品牌名等），跳过翻译。
+   * 启发式：词在句中（非句首）出现大写形式 且 从未出现小写形式 → 判定为专有名词。
+   * 能识别 "Trump" "Biden" "Microsoft"，但不会误伤 "Apple"（若文中也有 "apple"）。
+   */
+  function detectProperNouns(text) {
+    const stats = new Map(); // lowercase -> { lower, midCap, sentStart }
+    const regex = /[a-zA-Z][a-zA-Z'-]*/g;
+    let match;
+    let prevEnd = 0;
+
+    while ((match = regex.exec(text)) !== null) {
+      const word = match[0];
+      const start = match.index;
+      if (word.length <= 2) { prevEnd = start + word.length; continue; }
+      if (word === word.toUpperCase()) { prevEnd = start + word.length; continue; } // 全大写（缩写）
+
+      const lower = word.toLowerCase();
+      const firstChar = word[0];
+      const isCapitalized = firstChar >= "A" && firstChar <= "Z";
+      const between = text.slice(prevEnd, start);
+      // 句首判定：文本起始 / 前面有 .!? 或换行（允许后接引号/括号/空白）
+      const isSentenceStart = prevEnd === 0 || /[.!?\n][\s"')\]]*$/.test(between);
+
+      let entry = stats.get(lower);
+      if (!entry) {
+        entry = { lower: 0, midCap: 0, sentStart: 0 };
+        stats.set(lower, entry);
+      }
+      if (!isCapitalized) entry.lower++;
+      else if (isSentenceStart) entry.sentStart++;
+      else entry.midCap++;
+
+      prevEnd = start + word.length;
+    }
+
+    const properNouns = new Set();
+    for (const [word, s] of stats) {
+      if (s.midCap > 0 && s.lower === 0) properNouns.add(word);
+    }
+    return properNouns;
+  }
+
   function extractWordsFromParagraphs() {
     const articleRoot = getArticleRoot();
     const blocks = articleRoot.querySelectorAll("p, li, td, h1, h2, h3, h4, h5, h6, blockquote, figcaption");
     const wordContexts = [];
     const seen = new Set();
 
+    // 第一遍：收集全文文本，识别专有名词
+    const eligibleBlocks = [];
+    let fullText = "";
     for (const block of blocks) {
-      // 跳过嵌套在非正文区域里的元素
       if (block.closest(NON_ARTICLE_SELECTORS)) continue;
       const text = block.textContent || "";
       if (!text.trim() || text.length < 10) continue;
+      eligibleBlocks.push({ block, text });
+      fullText += text + "\n";
+    }
+    const properNouns = detectProperNouns(fullText);
+
+    for (const { text } of eligibleBlocks) {
       // 整段文本用于 LLM 段落级语义消歧（截取前500字）
       const paragraph = text.trim().slice(0, 500);
 
@@ -237,6 +291,7 @@
       while ((match = regex.exec(text)) !== null) {
         const clean = normalizeWord(match[0]);
         if (!shouldProcess(clean)) continue;
+        if (properNouns.has(clean)) continue; // 跳过专有名词
         if (seen.has(clean)) continue;
         // 固定短语检测：若命中短语，直接用短语翻译写入 annotationMap
         const phraseCtx = text.slice(Math.max(0, match.index - 30), match.index + match[0].length + 30);
@@ -574,12 +629,13 @@
   let llmBannerEl = null;
   let llmBannerTimer = null;
 
-  function showLlmWarning() {
+  function showLlmWarning(detail = "") {
     if (llmBannerEl) return; // 已经在显示
+    const suffix = detail ? `：${escapeHtml(String(detail).slice(0, 120))}` : "";
     llmBannerEl = document.createElement("div");
     llmBannerEl.id = "ww-banner";
     llmBannerEl.innerHTML = `
-      <svg style="width:16px;height:16px;vertical-align:-2px;margin-right:6px" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>AI 翻译服务未连接 — 当前使用本地词典，请在扩展设置中检查 API 配置</span>
+      <svg style="width:16px;height:16px;vertical-align:-2px;margin-right:6px" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>AI 翻译服务未连接 — 当前使用本地词典${suffix}</span>
       <button class="ww-banner-close" title="关闭">&times;</button>
     `;
     document.body.appendChild(llmBannerEl);
@@ -882,6 +938,7 @@
   function clearAllAnnotations() {
     document.querySelectorAll(".ww-cn").forEach((el) => el.remove());
     annotationMap = {};
+    scannedWords = new Set();
     _articleRoot = null; // 重新检测文章区域
   }
 
@@ -957,18 +1014,205 @@
     }
   }
 
-  function renderSummaryLoading() {
+  // Build the persistent shell used during streaming. Sections are appended
+  // into .ww-sum-body as they arrive. Shows a full skeleton (title +
+  // overview + 4 placeholder sections) so the panel reads as "loading"
+  // without any spinning icon.
+  function renderSummaryShell(lang) {
     const panel = ensureSummaryPanel();
+    const langBtns = ["zh", "en", "bilingual"].map((l) => {
+      const label = l === "zh" ? "中" : l === "en" ? "EN" : "双";
+      const active = l === lang ? " active" : "";
+      return `<button class="ww-sum-lang-btn${active}" data-lang="${l}">${label}</button>`;
+    }).join("");
+
+    const placeholderSections = Array.from({ length: 4 }).map(() => `
+      <div class="ww-sum-section ww-sum-section-pending">
+        <div class="ww-sum-section-head">
+          <span class="ww-sum-section-dot ww-sum-section-dot-pending"></span>
+          <span class="ww-sum-skeleton ww-sum-skeleton-heading"></span>
+        </div>
+        <div class="ww-sum-points">
+          <div class="ww-sum-point-pending"><span class="ww-sum-skeleton"></span></div>
+          <div class="ww-sum-point-pending"><span class="ww-sum-skeleton"></span></div>
+        </div>
+      </div>
+    `).join("");
+
     panel.innerHTML = `
       <div class="ww-sum-header">
         <div class="ww-sum-brand">
           <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
           <span class="ww-sum-brand-text">Overview</span>
+          <span class="ww-sum-thinking" aria-hidden="true"><span></span><span></span><span></span></span>
         </div>
+        <div class="ww-sum-actions">
+          ${langBtns}
+          <button class="ww-sum-close" title="关闭">✕</button>
+        </div>
+        <div class="ww-sum-progress" aria-hidden="true"></div>
       </div>
-      <div class="ww-sum-loading">正在生成摘要...</div>
+      <div class="ww-sum-body">
+        <div class="ww-sum-title ww-sum-title-pending"><span class="ww-sum-skeleton"></span></div>
+        <div class="ww-sum-overview ww-sum-overview-pending"><span class="ww-sum-skeleton"></span><span class="ww-sum-skeleton"></span></div>
+        ${placeholderSections}
+      </div>
     `;
+    panel.classList.add("ww-streaming");
+
+    panel.querySelectorAll(".ww-sum-lang-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        summaryLang = btn.dataset.lang;
+        if (summaryData) renderSummary(summaryData, summaryLang);
+      });
+    });
+    panel.querySelector(".ww-sum-close").addEventListener("click", (e) => {
+      e.stopPropagation();
+      panel.classList.remove("ww-show");
+    });
     panel.classList.add("ww-show");
+    return panel;
+  }
+
+  function removeSummaryPlaceholders(panel) {
+    panel.querySelectorAll(".ww-sum-section-pending").forEach((el) => el.remove());
+  }
+
+  /**
+   * Split text into animatable tokens (words for English, chars for CJK).
+   * Returns HTML where each token is wrapped in <span class="ww-tok" style="--i:N">...</span>
+   * `startIndex` lets multiple lines share a continuous stagger.
+   */
+  function tokenizeForReveal(text, startIndex = 0) {
+    if (!text) return { html: "", count: 0 };
+    const str = String(text);
+    let i = startIndex;
+    let html = "";
+    // Split into runs of (CJK char | non-CJK chunk separated by spaces)
+    // Strategy: iterate codepoints; group ASCII into words, treat CJK as single tokens.
+    let buffer = "";
+    const flushAscii = () => {
+      if (!buffer) return;
+      // Split on spaces, keep spaces as static separators
+      const parts = buffer.split(/(\s+)/);
+      for (const part of parts) {
+        if (!part) continue;
+        if (/^\s+$/.test(part)) {
+          html += part;
+        } else {
+          html += `<span class="ww-tok" style="--i:${i}">${escapeHtml(part)}</span>`;
+          i++;
+        }
+      }
+      buffer = "";
+    };
+    for (const ch of str) {
+      const code = ch.codePointAt(0);
+      // CJK Unified Ideographs / Hiragana / Katakana / Hangul / fullwidth punct
+      const isCJK = (
+        (code >= 0x4e00 && code <= 0x9fff) ||
+        (code >= 0x3000 && code <= 0x303f) ||
+        (code >= 0x3040 && code <= 0x30ff) ||
+        (code >= 0xac00 && code <= 0xd7af) ||
+        (code >= 0xff00 && code <= 0xffef)
+      );
+      if (isCJK) {
+        flushAscii();
+        html += `<span class="ww-tok" style="--i:${i}">${escapeHtml(ch)}</span>`;
+        i++;
+      } else {
+        buffer += ch;
+      }
+    }
+    flushAscii();
+    return { html, count: i - startIndex };
+  }
+
+  function applyMetaToShell(panel, meta, lang) {
+    const isZh = lang === "zh";
+    const isBi = lang === "bilingual";
+    const titleEl = panel.querySelector(".ww-sum-title");
+    const overviewEl = panel.querySelector(".ww-sum-overview");
+    if (titleEl) {
+      titleEl.classList.remove("ww-sum-title-pending");
+      titleEl.innerHTML = "";
+      let i = 0;
+      if (isBi) {
+        const a = tokenizeForReveal(meta.title_zh || "", i); i += a.count;
+        const b = tokenizeForReveal(meta.title_en || "", i); i += b.count;
+        titleEl.innerHTML = `${a.html}<br><span style="font-weight:500;font-size:13px;color:#64748b">${b.html}</span>`;
+      } else {
+        const txt = isZh ? (meta.title_zh || meta.title_en) : (meta.title_en || meta.title_zh);
+        titleEl.innerHTML = tokenizeForReveal(txt || "", 0).html;
+      }
+    }
+    if (overviewEl) {
+      overviewEl.classList.remove("ww-sum-overview-pending");
+      overviewEl.innerHTML = "";
+      // Title may have ~10 tokens; start overview shortly after but not too late
+      let i = 8;
+      if (isBi) {
+        const a = tokenizeForReveal(meta.overview_zh || "", i); i += a.count;
+        const b = tokenizeForReveal(meta.overview_en || "", i); i += b.count;
+        overviewEl.innerHTML = `${a.html}<br><span style="color:#94a3b8">${b.html}</span>`;
+      } else {
+        const txt = isZh ? (meta.overview_zh || meta.overview_en) : (meta.overview_en || meta.overview_zh);
+        overviewEl.innerHTML = tokenizeForReveal(txt || "", i).html;
+      }
+    }
+  }
+
+  function appendSectionToShell(panel, sec, lang) {
+    const body = panel.querySelector(".ww-sum-body");
+    if (!body) return;
+    const isZh = lang === "zh";
+    const isBi = lang === "bilingual";
+
+    let tokIdx = 0;
+    let heading;
+    if (isBi) {
+      const a = tokenizeForReveal(sec.heading_zh || "", tokIdx); tokIdx += a.count;
+      const b = tokenizeForReveal(sec.heading_en || "", tokIdx); tokIdx += b.count;
+      heading = `${a.html}<span style="font-weight:400;color:#94a3b8;font-size:11px;margin-left:6px">${b.html}</span>`;
+    } else {
+      const txt = isZh ? (sec.heading_zh || sec.heading_en) : (sec.heading_en || sec.heading_zh);
+      const r = tokenizeForReveal(txt || "", tokIdx); tokIdx += r.count;
+      heading = r.html;
+    }
+
+    const points = isZh ? (sec.points_zh || sec.points_en || []) : (sec.points_en || sec.points_zh || []);
+    const pointsBi = isBi ? (sec.points_en || []) : [];
+    const pointsHtml = points.map((pt, idx) => {
+      let html = `<div class="ww-sum-point">`;
+      const r = tokenizeForReveal(pt || "", tokIdx); tokIdx += r.count;
+      html += r.html;
+      if (isBi && pointsBi[idx]) {
+        const r2 = tokenizeForReveal(pointsBi[idx], tokIdx); tokIdx += r2.count;
+        html += `<br><span style="color:#94a3b8;font-size:11px">${r2.html}</span>`;
+      }
+      html += `</div>`;
+      return html;
+    }).join("");
+
+    const wrap = document.createElement("div");
+    wrap.className = "ww-sum-section ww-sum-section-enter";
+    wrap.innerHTML = `
+      <div class="ww-sum-section-head">
+        <span class="ww-sum-section-dot"></span>
+        <span class="ww-sum-section-title">${heading}</span>
+      </div>
+      <div class="ww-sum-points">${pointsHtml}</div>
+    `;
+    // Insert before the first placeholder (so placeholders get pushed down
+    // and consumed one-by-one as real sections arrive).
+    const firstPending = body.querySelector(".ww-sum-section-pending");
+    if (firstPending) {
+      body.insertBefore(wrap, firstPending);
+      firstPending.remove();
+    } else {
+      body.appendChild(wrap);
+    }
   }
 
   function renderSummaryError(msg) {
@@ -1076,75 +1320,139 @@
 
   async function requestSummary() {
     const text = extractArticleText();
-    if (!text || text.length < 100) return;
-
     const fab = ensureSummaryFab();
-    fab.classList.add("ww-loading");
-    renderSummaryLoading();
-
-    const result = await sendMsg({
-      type: "summarize_article",
-      text,
-      pageUrl: window.location.href,
-    });
-
-    fab.classList.remove("ww-loading");
-
-    if (result.error) {
-      renderSummaryError(result.error);
+    if (!text || text.length < 100) {
+      renderSummaryError("当前页面没有足够的正文内容可以生成摘要");
       return;
     }
 
-    summaryData = result;
-    fab.classList.add("ww-has-summary");
-    renderSummary(summaryData, summaryLang);
+    fab.classList.add("ww-loading");
+    // Show the full skeleton shell immediately so the panel is alive on click.
+    const panel = renderSummaryShell(summaryLang);
+
+    const accumulator = { sections: [] };
+    let gotError = false;
+    let port;
+    try {
+      port = chrome.runtime.connect({ name: "ww-summarize" });
+    } catch (err) {
+      fab.classList.remove("ww-loading");
+      renderSummaryError(err?.message || String(err));
+      return;
+    }
+
+    port.onMessage.addListener((evt) => {
+      if (!evt || !evt.type) return;
+      if (evt.type === "meta") {
+        Object.assign(accumulator, evt.data || {});
+        applyMetaToShell(panel, evt.data || {}, summaryLang);
+      } else if (evt.type === "section") {
+        accumulator.sections.push(evt.data || {});
+        appendSectionToShell(panel, evt.data || {}, summaryLang);
+      } else if (evt.type === "error") {
+        gotError = true;
+        fab.classList.remove("ww-loading");
+        panel.classList.remove("ww-streaming");
+        renderSummaryError(evt.data?.message || "未知错误");
+      } else if (evt.type === "done") {
+        // Persist final data so language switcher and re-opens work.
+        summaryData = accumulator;
+        fab.classList.remove("ww-loading");
+        fab.classList.add("ww-has-summary");
+        removeSummaryPlaceholders(panel);
+        panel.classList.remove("ww-streaming");
+      }
+    });
+
+    port.onDisconnect.addListener(() => {
+      fab.classList.remove("ww-loading");
+      panel.classList.remove("ww-streaming");
+      removeSummaryPlaceholders(panel);
+      // Disconnect without "done" or "error" — fall back to partial / error.
+      if (gotError) return;
+      if (!summaryData && (accumulator.title_en || accumulator.sections.length)) {
+        // Stream cut early but partial content arrived; treat partial as final.
+        summaryData = accumulator;
+        fab.classList.add("ww-has-summary");
+      } else if (!summaryData) {
+        renderSummaryError("摘要服务连接中断，请重试");
+      }
+    });
+
+    port.postMessage({
+      type: "start",
+      text,
+      pageUrl: window.location.href,
+    });
   }
 
   function initSummaryFab() {
-    // Only show FAB on pages with substantial text content
-    const text = extractArticleText();
-    if (text && text.length >= 300) {
-      const fab = ensureSummaryFab();
-      // Delay showing FAB to not distract from initial page load
-      setTimeout(() => fab.classList.add("ww-show"), 2000);
-    }
+    // Always show the FAB so the user has a fixed entry point.
+    // The click handler will show a friendly message if the page has no article.
+    const fab = ensureSummaryFab();
+    fab.classList.add("ww-show");
   }
 
   // === Main scan ===
   async function scanPage() {
     if (!isEnabled) return;
+    if (isScanning) {
+      scanQueued = true;
+      return;
+    }
+    isScanning = true;
+    scanQueued = false;
 
-    const wordContexts = extractWordsFromParagraphs();
-    if (wordContexts.length === 0) return;
+    try {
+      const wordContexts = extractWordsFromParagraphs()
+        .filter((wc) => {
+          const lemma = normalizeWord(wc.word);
+          return lemma && !scannedWords.has(lemma);
+        });
+      if (wordContexts.length === 0) return;
 
-    for (let i = 0; i < wordContexts.length; i += MAX_WORDS_PER_BATCH) {
-      const batch = wordContexts.slice(i, i + MAX_WORDS_PER_BATCH);
-      const result = await sendMsg({
-        type: "scan_page",
-        words: batch,
-        page_url: window.location.href,
-        pageSessionId,
-      });
-
-      if (result.error) {
-        /* scan error — silently ignored */
-        continue;
+      for (const wc of wordContexts) {
+        scannedWords.add(normalizeWord(wc.word));
       }
 
-      // LLM 状态检测
-      if (result.llm_ok === false) {
-        showLlmWarning();
+      for (let i = 0; i < wordContexts.length; i += MAX_WORDS_PER_BATCH) {
+        const batch = wordContexts.slice(i, i + MAX_WORDS_PER_BATCH);
+        const result = await sendMsg({
+          type: "scan_page",
+          words: batch,
+          page_url: window.location.href,
+          pageSessionId,
+        });
+
+        if (result.error) {
+          for (const item of batch) scannedWords.delete(normalizeWord(item.word));
+          continue;
+        }
+
+        // LLM 状态检测
+        if (result.llm_ok === false) {
+          showLlmWarning(result.llm_error || "");
+        }
+
+        for (const item of result.annotations || []) {
+          annotationMap[item.word.toLowerCase()] = {
+            brief: item.chinese,
+            meanings: [],
+          };
+        }
       }
 
-      for (const item of result.annotations || []) {
-        annotationMap[item.word.toLowerCase()] = {
-          brief: item.chinese,
-          meanings: [],
-        };
+      annotateDOM(getArticleRoot());
+    } finally {
+      isScanning = false;
+      if (scanQueued) {
+        scanQueued = false;
+        clearTimeout(scanTimeout);
+        scanTimeout = setTimeout(() => {
+          void scanPage();
+        }, SCAN_DEBOUNCE_MS);
       }
     }
-
-    annotateDOM(getArticleRoot());
   }
 
   // === Dynamic content ===
@@ -1154,7 +1462,11 @@
       let hasNew = false;
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
-          if (node.nodeType === Node.ELEMENT_NODE && !node.closest("#ww-detail, #ww-banner, #ww-summary")) {
+          if (
+            node.nodeType === Node.ELEMENT_NODE &&
+            !node.classList.contains("ww-cn") &&
+            !node.closest("#ww-detail, #ww-banner, #ww-summary, #ww-summary-fab")
+          ) {
             hasNew = true;
             break;
           }
@@ -1164,13 +1476,7 @@
       if (!hasNew) return;
       clearTimeout(scanTimeout);
       scanTimeout = setTimeout(() => {
-        for (const mutation of mutations) {
-          for (const node of mutation.addedNodes) {
-            if (node.nodeType === Node.ELEMENT_NODE && !SKIP_TAGS.has(node.tagName)) {
-              annotateDOM(node);
-            }
-          }
-        }
+        void scanPage();
       }, SCAN_DEBOUNCE_MS);
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -1183,10 +1489,10 @@
     if (!isEnabled) return;
 
     setupListeners();
+    initSummaryFab();
     setTimeout(async () => {
       await scanPage();
       observeDynamicContent();
-      initSummaryFab();
     }, 1000);
   }
 

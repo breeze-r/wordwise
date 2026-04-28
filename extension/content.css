@@ -380,14 +380,15 @@
     0 20px 48px rgba(15, 23, 42, 0.1);
   font-family: -apple-system, "SF Pro Display", "Segoe UI", "PingFang SC", sans-serif;
   -webkit-font-smoothing: antialiased;
-  transition: opacity 0.3s, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top right;
+  transition: opacity 0.32s ease, transform 0.5s cubic-bezier(0.34, 1.4, 0.64, 1);
   opacity: 0;
-  transform: translateX(20px);
+  transform: translateY(-12px) translateX(8px) scale(0.94);
   pointer-events: none;
 }
 #ww-summary.ww-show {
   opacity: 1;
-  transform: translateX(0);
+  transform: translateY(0) translateX(0) scale(1);
   pointer-events: auto;
 }
 #ww-summary::-webkit-scrollbar {
@@ -538,25 +539,175 @@
   background: #cbd5e1;
 }
 
-/* Loading state */
-#ww-summary .ww-sum-loading {
-  text-align: center;
-  padding: 32px 18px;
-  color: #94a3b8;
-  font-size: 12px;
+/* Skeleton loading — shown immediately on click, replaced as content streams in. */
+#ww-summary .ww-sum-title-pending,
+#ww-summary .ww-sum-overview-pending {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
-#ww-summary .ww-sum-loading::before {
-  content: "";
+#ww-summary .ww-sum-skeleton {
   display: block;
-  width: 20px;
-  height: 20px;
-  border: 2px solid #e2e8f0;
-  border-top-color: #0d9488;
-  border-radius: 50%;
-  animation: ww-spin 0.6s linear infinite;
-  margin: 0 auto 10px;
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+  background-size: 200% 100%;
+  animation: ww-shimmer 1.4s ease-in-out infinite;
 }
-@keyframes ww-spin { to { transform: rotate(360deg); } }
+#ww-summary .ww-sum-title-pending .ww-sum-skeleton { height: 14px; width: 75%; }
+#ww-summary .ww-sum-overview-pending .ww-sum-skeleton { width: 100%; }
+#ww-summary .ww-sum-overview-pending .ww-sum-skeleton + .ww-sum-skeleton { width: 65%; }
+
+/* Pending section placeholder */
+#ww-summary .ww-sum-section-pending .ww-sum-section-dot-pending {
+  background: #e2e8f0;
+  animation: ww-pulse 1.4s ease-in-out infinite;
+}
+#ww-summary .ww-sum-skeleton-heading {
+  height: 12px;
+  width: 50%;
+  margin-top: 2px;
+}
+#ww-summary .ww-sum-point-pending {
+  padding-left: 12px;
+  position: relative;
+  margin-bottom: 6px;
+}
+#ww-summary .ww-sum-point-pending::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #e2e8f0;
+}
+#ww-summary .ww-sum-point-pending .ww-sum-skeleton { height: 9px; width: 92%; }
+#ww-summary .ww-sum-point-pending:nth-child(2) .ww-sum-skeleton { width: 70%; }
+
+/* Stagger placeholders so they don't all shimmer in lockstep */
+#ww-summary .ww-sum-section-pending:nth-of-type(2) .ww-sum-skeleton,
+#ww-summary .ww-sum-section-pending:nth-of-type(2) .ww-sum-section-dot-pending { animation-delay: 0.15s; }
+#ww-summary .ww-sum-section-pending:nth-of-type(3) .ww-sum-skeleton,
+#ww-summary .ww-sum-section-pending:nth-of-type(3) .ww-sum-section-dot-pending { animation-delay: 0.3s; }
+#ww-summary .ww-sum-section-pending:nth-of-type(4) .ww-sum-skeleton,
+#ww-summary .ww-sum-section-pending:nth-of-type(4) .ww-sum-section-dot-pending { animation-delay: 0.45s; }
+
+@keyframes ww-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes ww-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* Real section fade-in as it streams in (replaces a placeholder) */
+#ww-summary .ww-sum-section-enter {
+  animation: ww-section-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes ww-section-in {
+  0%   { opacity: 0; transform: translateX(-12px) scale(0.97); filter: blur(2px); }
+  60%  { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
+}
+
+/* Section dot heartbeat-pop when a real section appears */
+#ww-summary .ww-sum-section-enter .ww-sum-section-dot {
+  animation: ww-dot-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both 0.1s;
+}
+@keyframes ww-dot-pop {
+  0%   { transform: scale(0); opacity: 0; }
+  50%  { transform: scale(1.5); opacity: 1; box-shadow: 0 0 0 4px rgba(13,148,136,0.18); }
+  100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(13,148,136,0); }
+}
+
+/* === Streaming-mode flourishes (only while .ww-loading on FAB / .ww-streaming on panel) === */
+
+/* Top progress bar — sits inside the header, visible while generating */
+#ww-summary .ww-sum-progress {
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 2px;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 0 0 2px 2px;
+  background: rgba(13,148,136,0.06);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+#ww-summary.ww-streaming .ww-sum-progress {
+  opacity: 1;
+}
+#ww-summary .ww-sum-progress::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, #14b8a6 30%, #5eead4 50%, #14b8a6 70%, transparent 100%);
+  transform: translateX(-100%);
+  animation: ww-progress-sweep 1.4s linear infinite;
+}
+@keyframes ww-progress-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Brand icon — gentle sparkle/glow while generating */
+#ww-summary .ww-sum-header { position: relative; }
+#ww-summary.ww-streaming .ww-sum-brand svg {
+  animation: ww-icon-pulse 2.4s ease-in-out infinite;
+}
+@keyframes ww-icon-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(13,148,136,0)); transform: scale(1); }
+  50%      { filter: drop-shadow(0 0 6px rgba(13,148,136,0.55)); transform: scale(1.06); }
+}
+
+/* "Overview" wordmark — append three pulsing dots during streaming */
+#ww-summary .ww-sum-thinking {
+  display: none;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+}
+#ww-summary.ww-streaming .ww-sum-thinking { display: inline-flex; }
+#ww-summary .ww-sum-thinking span {
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: #14b8a6;
+  opacity: 0.35;
+  animation: ww-thinking-dot 1.2s ease-in-out infinite;
+}
+#ww-summary .ww-sum-thinking span:nth-child(2) { animation-delay: 0.15s; }
+#ww-summary .ww-sum-thinking span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes ww-thinking-dot {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  50%      { opacity: 1; transform: translateY(-2px); }
+}
+
+/* Word-by-word reveal for title / overview / points */
+#ww-summary .ww-tok {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(3px);
+  transform: translateY(4px);
+  animation: ww-tok-in 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes ww-tok-in {
+  to { opacity: 1; filter: blur(0); transform: translateY(0); }
+}
+/* Soften reveal speed — chained delays via CSS variables */
+#ww-summary .ww-tok { animation-delay: calc(var(--i, 0) * 22ms); }
+
+/* When skeleton turns into real text — gentle crossfade for the wrapper */
+#ww-summary .ww-sum-title:not(.ww-sum-title-pending),
+#ww-summary .ww-sum-overview:not(.ww-sum-overview-pending) {
+  animation: ww-skel-resolve 0.4s ease both;
+}
+@keyframes ww-skel-resolve {
+  from { background: #f1f5f9; border-radius: 6px; }
+  to   { background: transparent; border-radius: 0; }
+}
 
 /* Error state */
 #ww-summary .ww-sum-error {
@@ -614,8 +765,18 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-#ww-summary-fab.ww-loading svg {
-  animation: ww-spin 1s linear infinite;
+#ww-summary-fab.ww-loading {
+  animation: ww-fab-breathe 1.6s ease-in-out infinite;
+}
+@keyframes ww-fab-breathe {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(13, 148, 136, 0.25);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 6px 20px rgba(13, 148, 136, 0.45);
+  }
 }
 #ww-summary-fab .ww-fab-badge {
   position: absolute;

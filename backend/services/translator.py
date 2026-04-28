@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, AsyncIterator
 
 import httpx
 
@@ -14,11 +14,10 @@ from collections import defaultdict
 
 from services.local_dictionary import (
     extract_inline_brief,
+    is_metadata_meaning,
     lookup_dictionary_entry,
     lookup_dictionary_entries,
-    match_senses_to_chinese,
     normalize_detail_meanings,
-    validate_chinese_with_dictionary,
 )
 from settings import get_settings
 
@@ -32,6 +31,17 @@ class TranslatorConfig:
     api_key: str | None
     api_url: str
     model: str
+
+
+def _normalize_chat_api_url(raw_url: str) -> str:
+    value = str(raw_url or "").strip().rstrip("/")
+    if not value:
+        return ""
+    if value.endswith("/chat/completions"):
+        return value
+    if value.endswith("/v1"):
+        return f"{value}/chat/completions"
+    return value
 
 
 def _resolve_translator_config(overrides: dict[str, str] | None = None) -> TranslatorConfig:
@@ -61,7 +71,7 @@ def _resolve_translator_config(overrides: dict[str, str] | None = None) -> Trans
     return TranslatorConfig(
         mode=mode,
         api_key=api_key,
-        api_url=api_url,
+        api_url=_normalize_chat_api_url(api_url),
         model=model,
     )
 
@@ -133,8 +143,10 @@ async def _chat_completion(
     prompt: str,
     overrides: dict[str, str] | None = None,
     *,
-    max_retries: int = 2,
+    max_retries: int = 1,
     parse_json: bool = True,
+    max_tokens: int = 1200,
+    timeout_seconds: float = 20.0,
 ) -> Any:
     config = _resolve_translator_config(overrides)
     if config.mode == "local_wordbook":
@@ -161,7 +173,8 @@ async def _chat_completion(
     last_error_detail: str | None = None
     for attempt in range(1 + max_retries):
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            timeout = httpx.Timeout(timeout_seconds, connect=10.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(
                     config.api_url,
                     headers={
@@ -171,7 +184,7 @@ async def _chat_completion(
                     json={
                         "model": config.model,
                         "messages": [{"role": "user", "content": prompt}],
-                        "max_tokens": 2048,
+                        "max_tokens": max_tokens,
                         "temperature": 0.1,
                     },
                 )
@@ -228,10 +241,10 @@ async def summarize_article(
     overrides: dict[str, str] | None = None,
 ) -> dict | None:
     """使用 LLM 生成结构化文章摘要（中英双语）。"""
-    # 截断过长文本，保留核心内容
-    truncated = text[:6000]
-    if len(text) > 6000:
-        truncated += "\n[... article truncated ...]"
+    # Keep in sync with summarize_article_stream — trim to 3500 for lower TTFT.
+    truncated = text[:3500]
+    if len(text) > 3500:
+        truncated += "\n[... truncated ...]"
 
     prompt = f"""You are a bilingual reading assistant. Analyze the following article and return a structured summary in JSON format.
 
@@ -240,7 +253,7 @@ Requirements:
 - "title_zh": the same title in Chinese (max 20 chars)
 - "overview_en": 1-2 sentence English overview
 - "overview_zh": 1-2 sentence Chinese overview
-- "sections": array of 3-6 key sections, each with:
+- "sections": array of 4-6 key sections, each with:
   - "heading_en": short English section heading (3-8 words)
   - "heading_zh": Chinese translation of heading
   - "points_en": array of 1-3 bullet points in English (each under 20 words)
@@ -251,7 +264,14 @@ Keep it concise and insightful. Return ONLY valid JSON, no markdown.
 Article:
 {truncated}"""
 
-    result = await _chat_completion(prompt, overrides=overrides, parse_json=True)
+    result = await _chat_completion(
+        prompt,
+        overrides=overrides,
+        parse_json=True,
+        max_retries=0,
+        max_tokens=1200,
+        timeout_seconds=60.0,
+    )
 
     # LLM 调用失败，透传错误详情
     if result is None:
@@ -269,6 +289,190 @@ Article:
         return None
 
     return result
+
+
+# ── Streaming summary (NDJSON over SSE) ──────────────────────────────
+
+_SUMMARY_NDJSON_PROMPT = """You are a bilingual reading assistant. Stream a structured summary as NDJSON: one complete JSON object per line, no array, no markdown, no commentary.
+
+Order:
+1. {{"type":"meta","title_en":"<=12 words","title_zh":"<=16 chars","overview_en":"1 sentence","overview_zh":"1 sentence"}}
+2. Then 3-4 section objects:
+{{"type":"section","heading_en":"3-6 words","heading_zh":"...","points_en":["...","..."],"points_zh":["...","..."]}}
+
+Rules:
+- Each line MUST be one complete, parseable JSON object.
+- No literal or escaped newlines inside strings — use spaces.
+- 1-2 short points per section (each <=15 words).
+- Output ONLY the NDJSON lines.
+
+Article:
+{article}"""
+
+
+async def summarize_article_stream(
+    text: str,
+    overrides: dict[str, str] | None = None,
+) -> AsyncIterator[dict]:
+    """流式生成文章摘要：边解析 LLM 输出边逐行 yield 事件。
+
+    yields events of shape {"type": "meta"|"section"|"done"|"error", "data": {...}}
+    """
+    # Trim aggressively for lower TTFT. Keep first 3500 chars (intro + early body)
+    # which usually contains the lead and main thesis.
+    truncated = text[:3500]
+    if len(text) > 3500:
+        truncated += "\n[... truncated ...]"
+
+    prompt = _SUMMARY_NDJSON_PROMPT.format(article=truncated)
+
+    config = _resolve_translator_config(overrides)
+    if not config.api_key or not config.api_url or not config.model:
+        missing = []
+        if not config.api_key:
+            missing.append("API Key")
+        if not config.api_url:
+            missing.append("API URL")
+        if not config.model:
+            missing.append("模型名称")
+        yield {"type": "error", "data": {"message": f"LLM 配置不完整，缺少：{', '.join(missing)}。请在插件弹窗中设置。"}}
+        return
+
+    logger.info(
+        "[translator] LLM stream request: url=%s model=%s prompt_len=%d",
+        config.api_url, config.model, len(prompt),
+    )
+
+    payload = {
+        "model": config.model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 900,
+        "temperature": 0.1,
+        "stream": True,
+    }
+    headers = {
+        "Authorization": f"Bearer {config.api_key}",
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+    }
+
+    timeout = httpx.Timeout(75.0, connect=10.0)
+    output_buffer = ""
+    emitted_any = False
+
+    import time
+    t_start = time.monotonic()
+    t_first_byte = None
+    t_first_event = None
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream("POST", config.api_url, headers=headers, json=payload) as resp:
+                if resp.status_code >= 400:
+                    body = (await resp.aread()).decode("utf-8", errors="replace")[:500]
+                    logger.warning("[translator] LLM stream HTTP %d: %s", resp.status_code, body)
+                    detail = body
+                    try:
+                        err_json = json.loads(body)
+                        detail = err_json.get("error", {}).get("message", body) or body
+                    except Exception:
+                        pass
+                    yield {"type": "error", "data": {"message": f"LLM HTTP {resp.status_code}: {detail}"}}
+                    return
+
+                async for raw_line in resp.aiter_lines():
+                    if t_first_byte is None:
+                        t_first_byte = time.monotonic() - t_start
+                        logger.info("[translator] LLM stream first byte: %.2fs", t_first_byte)
+                    if not raw_line:
+                        continue
+                    if not raw_line.startswith("data:"):
+                        continue
+                    data_str = raw_line[5:].strip()
+                    if not data_str or data_str == "[DONE]":
+                        if data_str == "[DONE]":
+                            break
+                        continue
+                    try:
+                        chunk = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+                    try:
+                        delta = chunk["choices"][0].get("delta", {}).get("content") or ""
+                    except (KeyError, IndexError, TypeError):
+                        delta = ""
+                    if not delta:
+                        continue
+                    output_buffer += delta
+                    while "\n" in output_buffer:
+                        nl = output_buffer.index("\n")
+                        line = output_buffer[:nl].strip()
+                        output_buffer = output_buffer[nl + 1:]
+                        evt = _parse_summary_line(line)
+                        if evt is not None:
+                            if t_first_event is None:
+                                t_first_event = time.monotonic() - t_start
+                                logger.info("[translator] LLM stream first event: %.2fs (type=%s)", t_first_event, evt.get("type"))
+                            emitted_any = True
+                            yield evt
+    except httpx.TimeoutException as exc:
+        logger.warning("[translator] LLM stream timeout: %s", exc)
+        yield {"type": "error", "data": {"message": "LLM 请求超时"}}
+        return
+    except Exception as exc:
+        logger.exception("[translator] LLM stream error: %s", exc)
+        yield {"type": "error", "data": {"message": f"LLM 流式请求失败：{exc}"}}
+        return
+
+    # Flush trailing buffer
+    tail = output_buffer.strip()
+    if tail:
+        evt = _parse_summary_line(tail)
+        if evt is not None:
+            emitted_any = True
+            yield evt
+
+    if not emitted_any:
+        yield {"type": "error", "data": {"message": "LLM 未返回可解析的摘要内容"}}
+        return
+
+    total = time.monotonic() - t_start
+    logger.info(
+        "[translator] LLM stream done: total=%.2fs first_byte=%.2fs first_event=%.2fs",
+        total, t_first_byte or -1, t_first_event or -1,
+    )
+    yield {"type": "done", "data": {}}
+
+
+def _parse_summary_line(line: str) -> dict | None:
+    """Parse one NDJSON line from the LLM and convert it into a stream event.
+
+    Tolerates ```json fences and stray prefixes the model occasionally emits.
+    Returns None if the line is not a usable summary object.
+    """
+    s = line.strip()
+    if not s:
+        return None
+    # Strip code fences
+    if s.startswith("```"):
+        return None
+    # Some models prefix lines with bullets — strip
+    if s[0] in "-*•":
+        s = s.lstrip("-*• ").strip()
+    if not s.startswith("{"):
+        return None
+    try:
+        obj = json.loads(s)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(obj, dict):
+        return None
+    obj_type = obj.pop("type", None)
+    if obj_type == "meta":
+        return {"type": "meta", "data": obj}
+    if obj_type == "section":
+        return {"type": "section", "data": obj}
+    return None
 
 
 async def _batch_chinese_fallback(
@@ -298,14 +502,41 @@ async def _batch_chinese_fallback(
     return {str(k).lower(): str(v).strip() for k, v in result.items() if v}
 
 
+def _pick_dictionary_meaning(entry: dict[str, Any], translated_context: str) -> str:
+    candidates = normalize_detail_meanings(
+        [entry.get("brief"), *(entry.get("meanings") or [])],
+        limit=8,
+    )
+    filtered = [
+        item for item in candidates
+        if item and not is_metadata_meaning(item)
+    ]
+
+    context = translated_context or ""
+    scored: list[tuple[int, int, str]] = []
+    for item in filtered:
+        if item == context:
+            scored.append((100, -len(item), item))
+        elif item and item in context:
+            scored.append((80, -len(item), item))
+        elif context and context in item and len(item) <= len(context) + 3:
+            scored.append((50, -len(item), item))
+
+    if scored:
+        scored.sort(reverse=True)
+        return scored[0][2][:20]
+
+    return (extract_inline_brief(entry.get("brief"), entry.get("meanings")) or "")[:20]
+
+
 async def batch_translate(
     word_contexts: list[dict], overrides: dict[str, str] | None = None
 ) -> dict:
     """
     批量翻译单词（段落优先）。
 
-    核心逻辑：先让 LLM 翻译整段 + 给出每个词的语境中文，
-    再用 LLM 的中文去本地词典匹配最合适的释义。
+    hybrid 模式：LLM 先翻译段落，本地词典再根据中文段落匹配词义。
+    remote 模式：LLM 同时返回段落和词义。
 
     word_contexts: [{"word": "paradigm", "sentence": "...", "paragraph": "..."}, ...]
     returns: {"_translations": {"paradigm": "范式", ...}, "_llm_ok": True/False}
@@ -338,37 +569,46 @@ async def batch_translate(
         para = str(wc.get("paragraph") or wc.get("sentence") or "").strip()[:500]
         paragraph_groups[para or ""].append(wc)
 
-    # ── 构建段落优先的 prompt：先翻译整段，再给每个词的语境中文 ──
+    # ── 构建段落优先的 prompt ──
     prompt_parts = [
-        "你是英语学习翻译助手。请先翻译每个段落为通顺的中文，"
-        "然后根据段落语境给出每个标记单词在当前上下文中最贴切的中文翻译。",
+        "你是英语学习翻译助手。请把下面每个英文段落翻译成通顺、准确的中文。",
         "",
     ]
 
-    group_idx = 0
     para_keys: list[str] = []
     for paragraph, wcs in paragraph_groups.items():
-        group_idx += 1
-        para_keys.append(str(group_idx))
+        para_keys.append(paragraph)
+        group_idx = len(para_keys)
         word_list = ", ".join(str(wc.get("word", "")).strip() for wc in wcs)
         prompt_parts.append(f"--- Paragraph {group_idx} ---")
         prompt_parts.append(f'"{paragraph}"')
-        prompt_parts.append(f"Words: {word_list}")
+        if config.mode == "remote":
+            prompt_parts.append(f"Words needing short Chinese meanings: {word_list}")
+        else:
+            prompt_parts.append(f"Focus words for later dictionary matching: {word_list}")
         prompt_parts.append("")
 
-    prompt_parts.append(
-        '请只返回 JSON 对象，格式如下：\n'
-        '{\n'
-        '  "paragraphs": {"1": "第一段的中文翻译", "2": "第二段的中文翻译"},\n'
-        '  "words": {"address": "地址", "novel": "新奇的", "bark": "树皮"}\n'
-        '}\n\n'
-        '规则：\n'
-        '- paragraphs: 每段完整通顺的中文翻译，key 是段落编号\n'
-        '- words: 每个标记单词在当前语境下最贴切的中文翻译，2-6个字\n'
-        '- 同一个词在不同句子里含义不同，必须按当前段落语境翻译\n'
-        '- 不要遗漏任何单词\n'
-        '- 不要输出 markdown 或解释'
-    )
+    if config.mode == "remote":
+        prompt_parts.append(
+            '请只返回 JSON 对象，格式如下：\n'
+            '{\n'
+            '  "paragraphs": {"1": "第一段的中文翻译", "2": "第二段的中文翻译"},\n'
+            '  "words": {"address": "地址", "novel": "新奇的", "bark": "树皮"}\n'
+            '}\n\n'
+            '规则：\n'
+            '- paragraphs: 每段完整通顺的中文翻译，key 是段落编号\n'
+            '- words: 每个标记单词在当前语境下最贴切的中文翻译，2-6个字\n'
+            '- 不要输出 markdown 或解释'
+        )
+    else:
+        prompt_parts.append(
+            '请只返回 JSON 对象，格式如下：\n'
+            '{"paragraphs": {"1": "第一段的中文翻译", "2": "第二段的中文翻译"}}\n\n'
+            '规则：\n'
+            '- paragraphs: 每段完整通顺的中文翻译，key 是段落编号\n'
+            '- 不要单独输出 words\n'
+            '- 不要输出 markdown 或解释'
+        )
 
     prompt = "\n".join(prompt_parts)
 
@@ -382,32 +622,21 @@ async def batch_translate(
                 "[translator] LLM paragraph translation failed in remote mode: %s",
                 err_detail or "unknown",
             )
-            return {"_translations": {}, "_llm_ok": False}
+            return {"_translations": {}, "_llm_ok": False, "_error": err_detail}
         logger.info(
             "[translator] LLM unavailable (%s); falling back to %d local entries.",
             err_detail or "unknown", len(local_results),
         )
-        return {"_translations": local_results, "_llm_ok": False}
+        return {"_translations": local_results, "_llm_ok": False, "_error": err_detail}
 
     # ── 提取 LLM 结果 ──
     paragraphs_zh = result.get("paragraphs") or {}
     llm_words = result.get("words") or {}
     llm_word_zh = {str(k).lower(): str(v).strip() for k, v in llm_words.items() if v}
 
-    # 拼接全部段落中文，用于词典匹配
-    all_para_zh = " ".join(str(v) for v in paragraphs_zh.values() if v)
-
     logger.info(
         "[translator] LLM returned: paragraphs=%d words=%d",
         len(paragraphs_zh), len(llm_word_zh),
-    )
-
-    # ── 用 LLM 的中文 + 段落中文 去词典匹配最佳释义 ──
-    validated = validate_chinese_with_dictionary(llm_word_zh, paragraph_zh=all_para_zh)
-
-    logger.info(
-        "[translator] dictionary validated: %d / %d words",
-        len(validated), len(llm_word_zh),
     )
 
     # ── 将段落编号映射回段落原文 → 中文翻译 ──
@@ -415,14 +644,34 @@ async def batch_translate(
     for idx_str, zh_text in paragraphs_zh.items():
         idx = int(idx_str) - 1 if str(idx_str).isdigit() else -1
         if 0 <= idx < len(para_keys):
-            para_en = list(paragraph_groups.keys())[idx]
-            para_zh_map[para_en[:80]] = str(zh_text).strip()
+            para_en = para_keys[idx]
+            para_zh_map[para_en] = str(zh_text).strip()
 
-    # 合并：词典验证后的结果 > 本地词典兜底
-    final = {**local_results, **validated}
+    if config.mode == "remote":
+        final = llm_word_zh
+    else:
+        final = {}
+        missing_local: list[dict] = []
+        for wc in word_contexts:
+            word = str(wc.get("word", "")).strip().lower()
+            paragraph = str(wc.get("paragraph") or wc.get("sentence") or "").strip()[:500]
+            translated_context = para_zh_map.get(paragraph, "")
+            entry = local_entries.get(word)
+            if entry:
+                meaning = _pick_dictionary_meaning(entry, translated_context)
+                if meaning:
+                    final[word] = meaning
+            else:
+                missing_local.append(wc)
+
+        if missing_local:
+            final.update(await _batch_chinese_fallback(missing_local, overrides=overrides))
+
+        final = {**local_results, **final}
+
     logger.info(
-        "[translator] batch done: total=%d validated=%d local=%d paras=%d",
-        len(final), len(validated), len(local_results), len(para_zh_map),
+        "[translator] batch done: total=%d local=%d paras=%d",
+        len(final), len(local_results), len(para_zh_map),
     )
     return {"_translations": final, "_llm_ok": True, "_paragraphs_zh": para_zh_map}
 
@@ -435,7 +684,14 @@ async def _translate_sentence(
     if not context:
         return None
     prompt = f'将以下英文翻译为通顺的中文，只返回翻译结果，不要任何解释：\n\n"{context}"'
-    result = await _chat_completion(prompt, overrides=overrides, parse_json=False)
+    result = await _chat_completion(
+        prompt,
+        overrides=overrides,
+        parse_json=False,
+        max_retries=0,
+        max_tokens=500,
+        timeout_seconds=12.0,
+    )
     if isinstance(result, str):
         cleaned = result.strip().strip('"').strip()
         return cleaned if cleaned else None

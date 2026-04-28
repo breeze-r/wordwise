@@ -6,6 +6,7 @@ import json
 import logging
 from datetime import datetime
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,12 @@ from schemas import WordLookupRequest, WordLookupResponse
 from services.auth import get_current_user
 from services.frequency import get_known_words
 from services.local_dictionary import extract_inline_brief, normalize_detail_meanings
-from services.translator import batch_translate, lookup_word_detail, summarize_article
+from services.translator import (
+    batch_translate,
+    lookup_word_detail,
+    summarize_article,
+    summarize_article_stream,
+)
 
 router = APIRouter(prefix="/api/reading", tags=["reading"])
 DEFAULT_EXPOSURE_LIMIT = 10
@@ -44,6 +50,7 @@ class AnnotationItem(BaseModel):
 class ScanResponse(BaseModel):
     annotations: list[AnnotationItem]
     llm_ok: bool = True
+    llm_error: str | None = None
 
 
 def _prefer_vocab(existing: UserVocabulary | None, candidate: UserVocabulary) -> UserVocabulary:
@@ -79,9 +86,33 @@ def _parse_meanings(raw_value: str | None) -> list[str]:
     return normalize_detail_meanings(payload, limit=4)
 
 
+def _parse_json_list(raw_value: str | None, limit: int = 4) -> list[str]:
+    if not raw_value:
+        return []
+    try:
+        payload = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(payload, list):
+        return []
+    values: list[str] = []
+    for item in payload:
+        text = str(item or "").strip()
+        if text and text not in values:
+            values.append(text)
+        if len(values) >= limit:
+            break
+    return values
+
+
 def _set_meanings(vocab: UserVocabulary, meanings: list[str]) -> None:
     normalized = normalize_detail_meanings(meanings, limit=4)
     vocab.meanings_json = json.dumps(normalized, ensure_ascii=False) if normalized else None
+
+
+def _set_definition_en(vocab: UserVocabulary, definitions: list[str]) -> None:
+    values = _parse_json_list(json.dumps(definitions, ensure_ascii=False), limit=4)
+    vocab.definition_en_json = json.dumps(values, ensure_ascii=False) if values else None
 
 
 def _reset_exposure_cycle(vocab: UserVocabulary) -> None:
@@ -134,7 +165,27 @@ async def _ensure_vocab_detail(
     translator_overrides: dict[str, str] | None = None,
 ) -> dict:
     """Fetch full word detail (from LLM / local dict), update vocab row, return detail dict."""
-    detail = await lookup_word_detail(word, sentence, overrides=translator_overrides)
+    has_cached_detail = bool(
+        vocab.definition_cn
+        and vocab.meanings_json
+        and vocab.definition_en_json
+        and (not sentence or vocab.sentence_zh)
+    )
+    if has_cached_detail:
+        return {
+            "lemma": vocab.lemma,
+            "brief": _brief_from_definition(vocab.definition_cn) or "",
+            "pos": vocab.pos,
+            "phonetic": vocab.phonetic,
+            "phonetic_uk": vocab.phonetic_uk,
+            "phonetic_us": vocab.phonetic_us,
+            "meanings": _parse_meanings(vocab.meanings_json),
+            "definition_en": _parse_json_list(vocab.definition_en_json),
+            "sentence_zh": vocab.sentence_zh,
+        }
+
+    sentence_for_lookup = None if vocab.sentence_zh else sentence
+    detail = await lookup_word_detail(word, sentence_for_lookup, overrides=translator_overrides)
     if not isinstance(detail, dict) or not detail:
         return {}
 
@@ -145,8 +196,16 @@ async def _ensure_vocab_detail(
         vocab.pos = detail["pos"]
     if detail.get("phonetic"):
         vocab.phonetic = detail["phonetic"]
+    if detail.get("phonetic_uk"):
+        vocab.phonetic_uk = detail["phonetic_uk"]
+    if detail.get("phonetic_us"):
+        vocab.phonetic_us = detail["phonetic_us"]
     if detail.get("meanings"):
         _set_meanings(vocab, detail["meanings"])
+    if detail.get("definition_en"):
+        _set_definition_en(vocab, detail["definition_en"])
+    if detail.get("sentence_zh"):
+        vocab.sentence_zh = detail["sentence_zh"]
 
     return detail
 
@@ -222,10 +281,12 @@ async def scan_page(
     # 3. 调 LLM 结合句意翻译（本地词典 / 数据库缓存仅兜底）
     llm_results: dict[str, str] = {}
     llm_ok = True
+    llm_error = None
     if to_translate:
         batch_result = await batch_translate(to_translate, overrides=translator_overrides)
         llm_results = batch_result.get("_translations", {})
         llm_ok = batch_result.get("_llm_ok", True)
+        llm_error = batch_result.get("_error")
 
     # 4. 合并结果：LLM 优先 → DB 缓存兜底
     annotations = []
@@ -266,7 +327,7 @@ async def scan_page(
         _apply_annotation_exposure(v, body.page_session_id)
 
     await db.commit()
-    return ScanResponse(annotations=annotations, llm_ok=llm_ok)
+    return ScanResponse(annotations=annotations, llm_ok=llm_ok, llm_error=llm_error)
 
 
 @router.post("/lookup", response_model=WordLookupResponse, summary="查询单词详情，可选触发重新曝光")
@@ -347,11 +408,11 @@ async def lookup_word(
         brief=brief,
         pos=detail.get("pos") or vocab.pos,
         phonetic=detail.get("phonetic") or vocab.phonetic,
-        phonetic_uk=detail.get("phonetic_uk"),
-        phonetic_us=detail.get("phonetic_us"),
+        phonetic_uk=detail.get("phonetic_uk") or vocab.phonetic_uk,
+        phonetic_us=detail.get("phonetic_us") or vocab.phonetic_us,
         meanings=_parse_meanings(vocab.meanings_json),
-        definition_en=detail.get("definition_en") or [],
-        sentence_zh=detail.get("sentence_zh"),
+        definition_en=detail.get("definition_en") or _parse_json_list(vocab.definition_en_json),
+        sentence_zh=detail.get("sentence_zh") or vocab.sentence_zh,
         exposure_remaining=vocab.exposure_remaining or 0,
         manual_lookup_count=vocab.manual_lookup_count or 0,
     )
@@ -389,3 +450,50 @@ async def summarize(
         return {"error": f"LLM 调用失败：{result['_error']}"}
 
     return result
+
+
+@router.post("/summarize/stream", summary="AI 文章摘要（SSE 流式输出）")
+async def summarize_stream(
+    body: SummarizeRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    """流式生成文章摘要。
+
+    返回 text/event-stream，每个事件为一行 `data: {json}`，json 格式：
+    - {"type":"meta","data":{title_en,title_zh,overview_en,overview_zh}}
+    - {"type":"section","data":{heading_en,heading_zh,points_en,points_zh}}
+    - {"type":"done","data":{}}
+    - {"type":"error","data":{"message":"..."}}
+    """
+    translator_overrides = _translator_overrides_from_request(request)
+    logger.info(
+        "[reading] summarize/stream mode=%s page=%s text_len=%d",
+        translator_overrides.get("mode", "default"),
+        body.page_url or "",
+        len(body.text),
+    )
+
+    text = body.text
+
+    async def event_source():
+        if len(text.strip()) < 100:
+            yield f"data: {json.dumps({'type':'error','data':{'message':'文章内容过短，无法生成摘要'}}, ensure_ascii=False)}\n\n"
+            return
+        try:
+            async for evt in summarize_article_stream(text, overrides=translator_overrides):
+                yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
+        except Exception as exc:
+            logger.exception("[reading] summarize/stream failure: %s", exc)
+            err = {"type": "error", "data": {"message": f"流式摘要异常：{exc}"}}
+            yield f"data: {json.dumps(err, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_source(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",  # disable proxy buffering (nginx etc.)
+            "Connection": "keep-alive",
+        },
+    )
