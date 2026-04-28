@@ -217,15 +217,33 @@ async def _chat_completion(
             resp = None
             if attempt < max_retries:
                 await asyncio.sleep(1.0 * (attempt + 1))
+        except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ReadError, httpx.ConnectError) as exc:
+            # Network-class errors — give a helpful message hinting at proxy/network
+            last_exc = exc
+            kind = type(exc).__name__
+            if isinstance(exc, httpx.ConnectTimeout):
+                last_error_detail = "🌐 连接超时（网络/代理不通）。建议换节点或用国内直连的 LLM（DeepSeek/Kimi/智谱）"
+            elif isinstance(exc, httpx.ReadTimeout):
+                last_error_detail = "🌐 响应超时（连上了没回数据）。代理节点抖动，可重试"
+            elif isinstance(exc, httpx.ReadError):
+                last_error_detail = "🌐 连接中断（中间被掐）。代理节点不稳"
+            else:
+                last_error_detail = f"🌐 网络错误：{exc}"
+            logger.warning(
+                "[translator] LLM network error (attempt %d/%d): [%s] %s",
+                attempt + 1, 1 + max_retries, kind, exc,
+            )
+            resp = None
+            if attempt < max_retries:
+                await asyncio.sleep(1.0 * (attempt + 1))
         except Exception as exc:
             last_exc = exc
-            last_error_detail = str(exc)
+            last_error_detail = f"{type(exc).__name__}: {exc}"
             logger.warning(
                 "[translator] LLM error (attempt %d/%d): [%s] %s",
                 attempt + 1, 1 + max_retries, type(exc).__name__, exc,
             )
             resp = None
-            # 对 5xx / 超时等瞬时错误做退避重试
             if attempt < max_retries:
                 await asyncio.sleep(1.0 * (attempt + 1))
 
@@ -356,73 +374,124 @@ async def summarize_article_stream(
         "Accept": "text/event-stream",
     }
 
+    import time
     timeout = httpx.Timeout(75.0, connect=10.0)
+    NETWORK_ERRORS = (
+        httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ReadError,
+        httpx.ConnectError, httpx.RemoteProtocolError,
+    )
+    MAX_ATTEMPTS = 3  # only retried while NOTHING has been yielded yet
+
     output_buffer = ""
     emitted_any = False
-
-    import time
     t_start = time.monotonic()
-    t_first_byte = None
-    t_first_event = None
 
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream("POST", config.api_url, headers=headers, json=payload) as resp:
-                if resp.status_code >= 400:
-                    body = (await resp.aread()).decode("utf-8", errors="replace")[:500]
-                    logger.warning("[translator] LLM stream HTTP %d: %s", resp.status_code, body)
-                    detail = body
-                    try:
-                        err_json = json.loads(body)
-                        detail = err_json.get("error", {}).get("message", body) or body
-                    except Exception:
-                        pass
-                    yield {"type": "error", "data": {"message": f"LLM HTTP {resp.status_code}: {detail}"}}
-                    return
+    for attempt in range(MAX_ATTEMPTS):
+        emitted_in_attempt = False
+        attempt_start = time.monotonic()
+        t_first_byte = None
+        t_first_event = None
+        output_buffer = ""
 
-                async for raw_line in resp.aiter_lines():
-                    if t_first_byte is None:
-                        t_first_byte = time.monotonic() - t_start
-                        logger.info("[translator] LLM stream first byte: %.2fs", t_first_byte)
-                    if not raw_line:
-                        continue
-                    if not raw_line.startswith("data:"):
-                        continue
-                    data_str = raw_line[5:].strip()
-                    if not data_str or data_str == "[DONE]":
-                        if data_str == "[DONE]":
-                            break
-                        continue
-                    try:
-                        chunk = json.loads(data_str)
-                    except json.JSONDecodeError:
-                        continue
-                    try:
-                        delta = chunk["choices"][0].get("delta", {}).get("content") or ""
-                    except (KeyError, IndexError, TypeError):
-                        delta = ""
-                    if not delta:
-                        continue
-                    output_buffer += delta
-                    while "\n" in output_buffer:
-                        nl = output_buffer.index("\n")
-                        line = output_buffer[:nl].strip()
-                        output_buffer = output_buffer[nl + 1:]
-                        evt = _parse_summary_line(line)
-                        if evt is not None:
-                            if t_first_event is None:
-                                t_first_event = time.monotonic() - t_start
-                                logger.info("[translator] LLM stream first event: %.2fs (type=%s)", t_first_event, evt.get("type"))
-                            emitted_any = True
-                            yield evt
-    except httpx.TimeoutException as exc:
-        logger.warning("[translator] LLM stream timeout: %s", exc)
-        yield {"type": "error", "data": {"message": "LLM 请求超时"}}
-        return
-    except Exception as exc:
-        logger.exception("[translator] LLM stream error: %s", exc)
-        yield {"type": "error", "data": {"message": f"LLM 流式请求失败：{exc}"}}
-        return
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                async with client.stream("POST", config.api_url, headers=headers, json=payload) as resp:
+                    if resp.status_code >= 400:
+                        body = (await resp.aread()).decode("utf-8", errors="replace")[:500]
+                        logger.warning("[translator] LLM stream HTTP %d: %s", resp.status_code, body)
+                        detail = body
+                        try:
+                            err_json = json.loads(body)
+                            detail = err_json.get("error", {}).get("message", body) or body
+                        except Exception:
+                            pass
+                        # 4xx / 5xx — don't retry, surface immediately
+                        yield {"type": "error", "data": {"message": f"LLM HTTP {resp.status_code}: {detail}"}}
+                        return
+
+                    async for raw_line in resp.aiter_lines():
+                        if t_first_byte is None:
+                            t_first_byte = time.monotonic() - attempt_start
+                            logger.info("[translator] LLM stream first byte: %.2fs (attempt %d)", t_first_byte, attempt + 1)
+                        if not raw_line:
+                            continue
+                        if not raw_line.startswith("data:"):
+                            continue
+                        data_str = raw_line[5:].strip()
+                        if not data_str or data_str == "[DONE]":
+                            if data_str == "[DONE]":
+                                break
+                            continue
+                        try:
+                            chunk = json.loads(data_str)
+                        except json.JSONDecodeError:
+                            continue
+                        try:
+                            delta = chunk["choices"][0].get("delta", {}).get("content") or ""
+                        except (KeyError, IndexError, TypeError):
+                            delta = ""
+                        if not delta:
+                            continue
+                        output_buffer += delta
+                        while "\n" in output_buffer:
+                            nl = output_buffer.index("\n")
+                            line = output_buffer[:nl].strip()
+                            output_buffer = output_buffer[nl + 1:]
+                            evt = _parse_summary_line(line)
+                            if evt is not None:
+                                if t_first_event is None:
+                                    t_first_event = time.monotonic() - attempt_start
+                                    logger.info(
+                                        "[translator] LLM stream first event: %.2fs (type=%s, attempt %d)",
+                                        t_first_event, evt.get("type"), attempt + 1,
+                                    )
+                                emitted_any = True
+                                emitted_in_attempt = True
+                                yield evt
+            # Stream finished cleanly — exit retry loop
+            break
+
+        except NETWORK_ERRORS as exc:
+            kind = type(exc).__name__
+            elapsed = time.monotonic() - attempt_start
+            if emitted_in_attempt:
+                # Already yielded events — can't safely retry without dup events.
+                logger.warning(
+                    "[translator] LLM stream interrupted mid-stream after %.2fs (attempt %d): [%s] %s",
+                    elapsed, attempt + 1, kind, exc,
+                )
+                yield {"type": "error", "data": {"message": f"🌐 流式连接被中断（已生成部分内容）：{exc}。代理节点不稳，可重试或换 API 提供商。"}}
+                return
+
+            if attempt < MAX_ATTEMPTS - 1:
+                backoff = 0.6 * (attempt + 1)
+                logger.warning(
+                    "[translator] LLM stream connect failed (attempt %d/%d, %.2fs) — retry in %.1fs: [%s] %s",
+                    attempt + 1, MAX_ATTEMPTS, elapsed, backoff, kind, exc,
+                )
+                await asyncio.sleep(backoff)
+                continue
+
+            # All retries exhausted
+            logger.warning(
+                "[translator] LLM stream gave up after %d attempts: [%s] %s",
+                MAX_ATTEMPTS, kind, exc,
+            )
+            if isinstance(exc, httpx.ConnectTimeout):
+                msg = f"🌐 连不上 LLM 服务器（已重试 {MAX_ATTEMPTS} 次仍超时）。代理节点路由不稳，建议换节点或换国内 LLM（DeepSeek/Kimi/智谱）。"
+            elif isinstance(exc, httpx.ReadTimeout):
+                msg = f"🌐 LLM 响应超时（已重试 {MAX_ATTEMPTS} 次）。模型负载高或代理抖动，稍后再试或换更快的模型。"
+            elif isinstance(exc, (httpx.ReadError, httpx.RemoteProtocolError)):
+                msg = f"🌐 连接被中间设备掐断（已重试 {MAX_ATTEMPTS} 次）。代理节点不可靠，强烈建议换国内直连 LLM。"
+            else:
+                msg = f"🌐 网络错误（已重试 {MAX_ATTEMPTS} 次）：{exc}"
+            yield {"type": "error", "data": {"message": msg}}
+            return
+
+        except Exception as exc:
+            logger.exception("[translator] LLM stream unexpected error: %s", exc)
+            yield {"type": "error", "data": {"message": f"⚠️ LLM 流式请求失败：{type(exc).__name__}: {exc}"}}
+            return
 
     # Flush trailing buffer
     tail = output_buffer.strip()
