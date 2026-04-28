@@ -44,6 +44,20 @@ def _normalize_chat_api_url(raw_url: str) -> str:
     return value
 
 
+def _build_extra_payload(model: str) -> dict:
+    """Provider-specific payload extras to fix common gotchas.
+
+    - DeepSeek V4 (and reasoner) default to thinking-mode ON, which emits
+      <think>...</think> content and breaks structured/JSON output. Disable
+      it explicitly for the use cases in this app (translation + summary).
+    """
+    m = (model or "").lower()
+    extras: dict = {}
+    if "deepseek-v4" in m or "deepseek-reasoner" in m or m.endswith("-thinking"):
+        extras["thinking"] = {"type": "disabled"}
+    return extras
+
+
 def _resolve_translator_config(overrides: dict[str, str] | None = None) -> TranslatorConfig:
     settings = get_settings()
     mode = settings.translator_mode
@@ -186,6 +200,7 @@ async def _chat_completion(
                         "messages": [{"role": "user", "content": prompt}],
                         "max_tokens": max_tokens,
                         "temperature": 0.1,
+                        **_build_extra_payload(config.model),
                     },
                 )
             resp.raise_for_status()
@@ -367,6 +382,7 @@ async def summarize_article_stream(
         "max_tokens": 900,
         "temperature": 0.1,
         "stream": True,
+        **_build_extra_payload(config.model),
     }
     headers = {
         "Authorization": f"Bearer {config.api_key}",
