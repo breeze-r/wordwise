@@ -326,7 +326,7 @@ Article:
 
 # ── Streaming summary (NDJSON over SSE) ──────────────────────────────
 
-_SUMMARY_NDJSON_PROMPT = """You are a bilingual reading assistant. Stream a structured summary as NDJSON: one complete JSON object per line, no array, no markdown, no commentary.
+_SUMMARY_NDJSON_PROMPT = r"""You are a bilingual reading assistant. Stream a structured summary as NDJSON: one complete JSON object per line, no array, no markdown, no commentary.
 
 Match the depth of your summary to the content. {depth_hint}
 
@@ -341,7 +341,20 @@ Rules:
 - {points_per_section} substantive points per section (each <={point_words} words).
 - Cover the article comprehensively — do NOT oversimplify rich content.
 - For papers/financial reports, surface concrete numbers, methods, findings, conclusions.
-- Output ONLY the NDJSON lines.
+
+Math notation (CRITICAL for academic / quantitative content):
+- ALWAYS write equations and mathematical expressions in LaTeX, NOT plain text.
+- Use $...$ for inline math and $$...$$ for display math.
+- Examples: write $E = mc^2$ NOT "E = mc^2"; write $\sigma^2$ NOT "sigma squared";
+  write $\sum_{{i=1}}^n x_i$ NOT "sum from i=1 to n of x_i".
+- Greek letters, subscripts, superscripts, integrals, fractions, matrices —
+  all of these MUST be in LaTeX form so they render natively.
+- Inside JSON strings, backslashes must be escaped: write "\\sigma" not "\sigma",
+  "$\\frac{{a}}{{b}}$" not "$\frac{{a}}{{b}}$".
+- For non-math content (regular sentences), do NOT use LaTeX — only wrap actual
+  math expressions.
+
+Output ONLY the NDJSON lines.
 
 Article:
 {article}"""

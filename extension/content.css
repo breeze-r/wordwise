@@ -685,6 +685,37 @@
   50%      { opacity: 1; transform: translateY(-2px); }
 }
 
+/* === Math (KaTeX) styling inside summary panel === */
+#ww-summary .ww-math {
+  display: inline-block;
+  vertical-align: baseline;
+  font-size: inherit;
+  line-height: 1;
+}
+#ww-summary .ww-math .katex {
+  font-size: 1em;       /* match surrounding text size */
+}
+#ww-summary .ww-math.ww-math-display {
+  display: block;
+  margin: 6px 0;
+  padding: 4px 6px;
+  text-align: center;
+  background: rgba(13, 148, 136, 0.04);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+#ww-summary .ww-math.ww-math-display .katex-display {
+  margin: 0;
+}
+#ww-summary .ww-math-fallback {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
 /* Word-by-word reveal for title / overview / points */
 #ww-summary .ww-tok {
   display: inline-block;

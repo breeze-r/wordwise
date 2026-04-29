@@ -1083,18 +1083,69 @@
   }
 
   /**
+   * Render a LaTeX math expression to HTML using KaTeX, falling back
+   * gracefully to the raw source if the formula is malformed or KaTeX
+   * isn't loaded. Returns a single HTML string (no token wrapping).
+   */
+  function renderLatex(formula, displayMode) {
+    const src = String(formula || "").trim();
+    if (!src) return "";
+    if (typeof window.katex === "undefined") {
+      return `<code class="ww-math-fallback">${escapeHtml(src)}</code>`;
+    }
+    try {
+      return window.katex.renderToString(src, {
+        displayMode: !!displayMode,
+        throwOnError: false,
+        strict: "ignore",
+        output: "html",
+        trust: false,
+      });
+    } catch (e) {
+      return `<code class="ww-math-fallback">${escapeHtml(src)}</code>`;
+    }
+  }
+
+  /**
+   * Pull math expressions ($...$, $$...$$, \(...\), \[...\]) out of text
+   * and replace them with placeholder markers. Returns:
+   *   { masked: text with markers, formulas: [{src, display}, ...] }
+   * The token-reveal pipeline then treats each marker as one atomic token.
+   */
+  function extractMath(text) {
+    if (!text) return { masked: "", formulas: [] };
+    const formulas = [];
+    // Order matters: longer / more specific patterns first to avoid mis-matches.
+    // Use a marker that is extremely unlikely to occur in real text.
+    const masked = String(text).replace(
+      /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\$([^$\n]+?)\$|\\\(([\s\S]+?)\\\)/g,
+      (_, dd, brk, sd, prn) => {
+        const src = dd ?? brk ?? sd ?? prn ?? "";
+        const display = dd != null || brk != null;
+        const idx = formulas.length;
+        formulas.push({ src, display });
+        return ` MATH${idx} `;
+      }
+    );
+    return { masked, formulas };
+  }
+
+  /**
    * Split text into animatable tokens (words for English, chars for CJK).
    * Returns HTML where each token is wrapped in <span class="ww-tok" style="--i:N">...</span>
    * `startIndex` lets multiple lines share a continuous stagger.
+   *
+   * Math expressions in LaTeX form ($...$, $$...$$, \(...\), \[...\]) are
+   * pre-extracted, KaTeX-rendered, and emitted as a single token so the
+   * formula stays intact during the reveal animation.
    */
   function tokenizeForReveal(text, startIndex = 0) {
     if (!text) return { html: "", count: 0 };
-    const str = String(text);
+    const { masked, formulas } = extractMath(String(text));
     let i = startIndex;
     let html = "";
-    // Split into runs of (CJK char | non-CJK chunk separated by spaces)
-    // Strategy: iterate codepoints; group ASCII into words, treat CJK as single tokens.
     let buffer = "";
+
     const flushAscii = () => {
       if (!buffer) return;
       // Split on spaces, keep spaces as static separators
@@ -1103,6 +1154,15 @@
         if (!part) continue;
         if (/^\s+$/.test(part)) {
           html += part;
+          continue;
+        }
+        // Detect math markers like "MATH3" — render KaTeX as one token
+        const m = part.match(/^MATH(\d+)$/);
+        if (m && formulas[+m[1]]) {
+          const f = formulas[+m[1]];
+          const cls = f.display ? "ww-tok ww-math ww-math-display" : "ww-tok ww-math";
+          html += `<span class="${cls}" style="--i:${i}">${renderLatex(f.src, f.display)}</span>`;
+          i++;
         } else {
           html += `<span class="ww-tok" style="--i:${i}">${escapeHtml(part)}</span>`;
           i++;
@@ -1110,7 +1170,8 @@
       }
       buffer = "";
     };
-    for (const ch of str) {
+
+    for (const ch of masked) {
       const code = ch.codePointAt(0);
       // CJK Unified Ideographs / Hiragana / Katakana / Hangul / fullwidth punct
       const isCJK = (
@@ -1238,32 +1299,64 @@
     panel.classList.add("ww-show");
   }
 
+  /**
+   * Render text with LaTeX math support but no token animation —
+   * used by renderSummary() (the static re-render after language switch).
+   */
+  function renderTextWithMath(text) {
+    if (!text) return "";
+    const { masked, formulas } = extractMath(String(text));
+    let out = "";
+    let buf = "";
+    const flush = () => {
+      if (!buf) return;
+      const parts = buf.split(/(\s+)/);
+      for (const part of parts) {
+        if (!part) continue;
+        const m = part.match(/^MATH(\d+)$/);
+        if (m && formulas[+m[1]]) {
+          const f = formulas[+m[1]];
+          const cls = f.display ? "ww-math ww-math-display" : "ww-math";
+          out += `<span class="${cls}">${renderLatex(f.src, f.display)}</span>`;
+        } else if (/^\s+$/.test(part)) {
+          out += part;
+        } else {
+          out += escapeHtml(part);
+        }
+      }
+      buf = "";
+    };
+    for (const ch of masked) buf += ch;
+    flush();
+    return out;
+  }
+
   function renderSummary(data, lang) {
     const panel = ensureSummaryPanel();
     const isZh = lang === "zh";
     const isBi = lang === "bilingual";
 
     const title = isBi
-      ? `${escapeHtml(data.title_zh || "")}<br><span style="font-weight:500;font-size:13px;color:#64748b">${escapeHtml(data.title_en || "")}</span>`
-      : escapeHtml(isZh ? (data.title_zh || data.title_en) : (data.title_en || data.title_zh));
+      ? `${renderTextWithMath(data.title_zh || "")}<br><span style="font-weight:500;font-size:13px;color:#64748b">${renderTextWithMath(data.title_en || "")}</span>`
+      : renderTextWithMath(isZh ? (data.title_zh || data.title_en) : (data.title_en || data.title_zh));
 
     const overview = isBi
-      ? `${escapeHtml(data.overview_zh || "")}<br><span style="color:#94a3b8">${escapeHtml(data.overview_en || "")}</span>`
-      : escapeHtml(isZh ? (data.overview_zh || data.overview_en) : (data.overview_en || data.overview_zh));
+      ? `${renderTextWithMath(data.overview_zh || "")}<br><span style="color:#94a3b8">${renderTextWithMath(data.overview_en || "")}</span>`
+      : renderTextWithMath(isZh ? (data.overview_zh || data.overview_en) : (data.overview_en || data.overview_zh));
 
     const sections = Array.isArray(data.sections) ? data.sections : [];
     const sectionsHtml = sections.map((sec) => {
       const heading = isBi
-        ? `${escapeHtml(sec.heading_zh || "")}<span style="font-weight:400;color:#94a3b8;font-size:11px;margin-left:6px">${escapeHtml(sec.heading_en || "")}</span>`
-        : escapeHtml(isZh ? (sec.heading_zh || sec.heading_en) : (sec.heading_en || sec.heading_zh));
+        ? `${renderTextWithMath(sec.heading_zh || "")}<span style="font-weight:400;color:#94a3b8;font-size:11px;margin-left:6px">${renderTextWithMath(sec.heading_en || "")}</span>`
+        : renderTextWithMath(isZh ? (sec.heading_zh || sec.heading_en) : (sec.heading_en || sec.heading_zh));
 
       const points = isZh ? (sec.points_zh || sec.points_en || []) : (sec.points_en || sec.points_zh || []);
       const pointsBi = isBi ? (sec.points_en || []) : [];
 
       const pointsHtml = points.map((pt, i) => {
-        let html = `<div class="ww-sum-point">${escapeHtml(pt)}`;
+        let html = `<div class="ww-sum-point">${renderTextWithMath(pt)}`;
         if (isBi && pointsBi[i]) {
-          html += `<br><span style="color:#94a3b8;font-size:11px">${escapeHtml(pointsBi[i])}</span>`;
+          html += `<br><span style="color:#94a3b8;font-size:11px">${renderTextWithMath(pointsBi[i])}</span>`;
         }
         html += `</div>`;
         return html;

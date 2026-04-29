@@ -12,8 +12,8 @@
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "js": ["lib/katex/katex.min.js", "content.js"],
+      "css": ["lib/katex/katex.min.css", "content.css"],
       "run_at": "document_idle"
     }
   ],
@@ -32,7 +32,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["lib/pdfjs/*", "offscreen.html"],
+      "resources": ["lib/pdfjs/*", "lib/katex/*", "lib/katex/fonts/*", "offscreen.html"],
       "matches": ["<all_urls>"]
     }
   ]
