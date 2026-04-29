@@ -328,19 +328,77 @@ Article:
 
 _SUMMARY_NDJSON_PROMPT = """You are a bilingual reading assistant. Stream a structured summary as NDJSON: one complete JSON object per line, no array, no markdown, no commentary.
 
+Match the depth of your summary to the content. {depth_hint}
+
 Order:
-1. {{"type":"meta","title_en":"<=12 words","title_zh":"<=16 chars","overview_en":"1 sentence","overview_zh":"1 sentence"}}
-2. Then 3-4 section objects:
-{{"type":"section","heading_en":"3-6 words","heading_zh":"...","points_en":["...","..."],"points_zh":["...","..."]}}
+1. {{"type":"meta","title_en":"<={title_words} words","title_zh":"<={title_zh_chars} chars","overview_en":"{overview_sents}","overview_zh":"{overview_sents}"}}
+2. Then {section_range} section objects:
+{{"type":"section","heading_en":"3-7 words","heading_zh":"...","points_en":["...","..."],"points_zh":["...","..."]}}
 
 Rules:
 - Each line MUST be one complete, parseable JSON object.
 - No literal or escaped newlines inside strings — use spaces.
-- 1-2 short points per section (each <=15 words).
+- {points_per_section} substantive points per section (each <={point_words} words).
+- Cover the article comprehensively — do NOT oversimplify rich content.
+- For papers/financial reports, surface concrete numbers, methods, findings, conclusions.
 - Output ONLY the NDJSON lines.
 
 Article:
 {article}"""
+
+
+def _summary_depth_profile(text_len: int) -> dict:
+    """Choose summary depth based on content length.
+
+    Returns the parameters used to render the prompt and to set max_tokens.
+    The thresholds are tuned for: short web articles, typical news/blogs,
+    long-form essays, and full academic papers / financial reports.
+    """
+    if text_len < 1500:
+        # Short blog post or news brief — keep it tight
+        return {
+            "depth_hint": "Content is short, so be concise but complete.",
+            "title_words": 12, "title_zh_chars": 16,
+            "overview_sents": "1-2 sentences",
+            "section_range": "3-4",
+            "points_per_section": "1-2",
+            "point_words": 18,
+            "input_cap": 1800,
+            "max_tokens": 800,
+        }
+    if text_len < 5000:
+        return {
+            "depth_hint": "Content is medium length — give a balanced overview.",
+            "title_words": 14, "title_zh_chars": 18,
+            "overview_sents": "2-3 sentences",
+            "section_range": "4-6",
+            "points_per_section": "2-3",
+            "point_words": 25,
+            "input_cap": 5500,
+            "max_tokens": 1600,
+        }
+    if text_len < 12000:
+        return {
+            "depth_hint": "Content is long — go deep enough to capture the substance.",
+            "title_words": 15, "title_zh_chars": 22,
+            "overview_sents": "2-4 sentences",
+            "section_range": "6-8",
+            "points_per_section": "2-3",
+            "point_words": 30,
+            "input_cap": 12000,
+            "max_tokens": 2400,
+        }
+    # Full papers / financial reports / long technical docs
+    return {
+        "depth_hint": "Content is dense and rich — produce a thorough briefing with concrete details.",
+        "title_words": 16, "title_zh_chars": 24,
+        "overview_sents": "3-5 sentences",
+        "section_range": "8-10",
+        "points_per_section": "3-4",
+        "point_words": 38,
+        "input_cap": 18000,
+        "max_tokens": 3500,
+    }
 
 
 async def summarize_article_stream(
@@ -351,13 +409,27 @@ async def summarize_article_stream(
 
     yields events of shape {"type": "meta"|"section"|"done"|"error", "data": {...}}
     """
-    # Trim aggressively for lower TTFT. Keep first 3500 chars (intro + early body)
-    # which usually contains the lead and main thesis.
-    truncated = text[:3500]
-    if len(text) > 3500:
+    # Pick depth profile based on full content length, then truncate to its cap.
+    profile = _summary_depth_profile(len(text))
+    cap = profile["input_cap"]
+    truncated = text[:cap]
+    if len(text) > cap:
         truncated += "\n[... truncated ...]"
 
-    prompt = _SUMMARY_NDJSON_PROMPT.format(article=truncated)
+    prompt = _SUMMARY_NDJSON_PROMPT.format(
+        article=truncated,
+        depth_hint=profile["depth_hint"],
+        title_words=profile["title_words"],
+        title_zh_chars=profile["title_zh_chars"],
+        overview_sents=profile["overview_sents"],
+        section_range=profile["section_range"],
+        points_per_section=profile["points_per_section"],
+        point_words=profile["point_words"],
+    )
+    logger.info(
+        "[translator] summary depth: text_len=%d cap=%d sections=%s max_tokens=%d",
+        len(text), cap, profile["section_range"], profile["max_tokens"],
+    )
 
     config = _resolve_translator_config(overrides)
     if not config.api_key or not config.api_url or not config.model:
@@ -379,8 +451,8 @@ async def summarize_article_stream(
     payload = {
         "model": config.model,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 900,
-        "temperature": 0.1,
+        "max_tokens": profile["max_tokens"],
+        "temperature": 0.2,
         "stream": True,
         **_build_extra_payload(config.model),
     }
@@ -391,7 +463,10 @@ async def summarize_article_stream(
     }
 
     import time
-    timeout = httpx.Timeout(75.0, connect=10.0)
+    # Scale timeout with max_tokens — deep summaries can take 60-90s end to end.
+    # Read timeout is per-chunk (between bytes) — generous since SSE may pause briefly.
+    read_timeout = 60.0 if profile["max_tokens"] >= 2400 else 45.0
+    timeout = httpx.Timeout(read_timeout, connect=10.0)
     NETWORK_ERRORS = (
         httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ReadError,
         httpx.ConnectError, httpx.RemoteProtocolError,

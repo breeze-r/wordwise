@@ -1026,7 +1026,10 @@
       return `<button class="ww-sum-lang-btn${active}" data-lang="${l}">${label}</button>`;
     }).join("");
 
-    const placeholderSections = Array.from({ length: 4 }).map(() => `
+    // 5 placeholders — typical depth across short/medium/long content.
+    // Extra real sections beyond 5 just append; fewer sections leave
+    // unused placeholders that get removed on `done`.
+    const placeholderSections = Array.from({ length: 5 }).map(() => `
       <div class="ww-sum-section ww-sum-section-pending">
         <div class="ww-sum-section-head">
           <span class="ww-sum-section-dot ww-sum-section-dot-pending"></span>
@@ -1318,17 +1321,74 @@
     panel.classList.add("ww-show");
   }
 
+  /** Detect whether the current page is a PDF document. */
+  function isPdfPage() {
+    if (document.contentType === "application/pdf") return true;
+    const url = (window.location.href || "").toLowerCase();
+    if (url.endsWith(".pdf")) return true;
+    if (url.includes(".pdf?") || url.includes(".pdf#")) return true;
+    // Chrome's built-in PDF viewer renders an <embed type="application/pdf">
+    if (document.querySelector('embed[type="application/pdf"]')) return true;
+    return false;
+  }
+
+  /**
+   * Ask the background service worker to fetch the current PDF URL and
+   * extract its text via the offscreen PDF.js parser. Returns the text
+   * (already smart-truncated for long documents) or throws.
+   */
+  async function extractPdfText() {
+    const result = await sendMsg({
+      type: "extract_pdf_text",
+      url: window.location.href,
+    });
+    if (!result || result.ok === false || result.error) {
+      throw new Error(result?.error || "PDF 解析失败");
+    }
+    return result;
+  }
+
   async function requestSummary() {
-    const text = extractArticleText();
     const fab = ensureSummaryFab();
-    if (!text || text.length < 100) {
-      renderSummaryError("当前页面没有足够的正文内容可以生成摘要");
-      return;
+    let text;
+
+    if (isPdfPage()) {
+      // Show the panel shell immediately so the loading state is visible
+      // while we fetch + parse the PDF (which can take several seconds).
+      fab.classList.add("ww-loading");
+      const panel = renderSummaryShell(summaryLang);
+      const titleEl = panel.querySelector(".ww-sum-title");
+      if (titleEl) titleEl.textContent = "正在解析 PDF…";
+      try {
+        const result = await extractPdfText();
+        text = result.text;
+        // If the PDF is empty (scanned image), bail with helpful message
+        if (!text || text.trim().length < 100) {
+          fab.classList.remove("ww-loading");
+          renderSummaryError("PDF 没有可提取的文本（可能是扫描版/图片版 PDF），无法摘要。");
+          return;
+        }
+      } catch (err) {
+        fab.classList.remove("ww-loading");
+        renderSummaryError("PDF 解析失败：" + (err?.message || String(err)));
+        return;
+      }
+    } else {
+      text = extractArticleText();
+      if (!text || text.length < 100) {
+        renderSummaryError("当前页面没有足够的正文内容可以生成摘要");
+        return;
+      }
     }
 
-    fab.classList.add("ww-loading");
-    // Show the full skeleton shell immediately so the panel is alive on click.
-    const panel = renderSummaryShell(summaryLang);
+    // For non-PDF pages, set loading state + render shell now.
+    // (PDF path already did this before parsing the PDF.)
+    if (!fab.classList.contains("ww-loading")) {
+      fab.classList.add("ww-loading");
+    }
+    const panel = document.querySelector("#ww-summary.ww-show")
+      ? document.getElementById("ww-summary")
+      : renderSummaryShell(summaryLang);
 
     const accumulator = { sections: [] };
     let gotError = false;
