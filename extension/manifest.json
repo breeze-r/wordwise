@@ -3,7 +3,7 @@
   "name": "WordWise",
   "version": "1.0.1",
   "description": "阅读即学词 — 智能标注生词，间隔重复记忆",
-  "permissions": ["storage", "activeTab", "tabs"],
+  "permissions": ["storage", "activeTab", "tabs", "offscreen"],
   "host_permissions": ["http://localhost/*"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "background": {
@@ -29,5 +29,11 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["lib/pdfjs/*", "offscreen.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

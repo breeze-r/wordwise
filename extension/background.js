@@ -107,8 +107,57 @@ async function apiRequest(path, options = {}) {
   return res.json();
 }
 
+// === Offscreen Document for PDF.js =================================
+// PDF.js v4 only ships ESM, which classic content scripts can't import.
+// Workaround: spawn a hidden offscreen document that loads PDF.js as a
+// module, and forward extraction requests through it.
+const OFFSCREEN_PATH = "offscreen.html";
+
+async function ensureOffscreenDocument() {
+  // Already created?
+  const existing = await chrome.runtime.getContexts({
+    contextTypes: ["OFFSCREEN_DOCUMENT"],
+  });
+  if (existing.length > 0) return;
+
+  await chrome.offscreen.createDocument({
+    url: OFFSCREEN_PATH,
+    reasons: ["DOM_PARSER"],
+    justification: "Run PDF.js to extract text from PDFs for translation/summary.",
+  });
+}
+
+function arrayBufferToBase64(buffer) {
+  // Chunked to avoid call-stack overflow on large buffers
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function extractPdfText(arrayBuffer) {
+  await ensureOffscreenDocument();
+  // Pass as base64 — far more compact than a JSON number array,
+  // avoids ArrayBuffer transfer quirks in MV3 messaging.
+  const bytesBase64 = arrayBufferToBase64(arrayBuffer);
+  const result = await chrome.runtime.sendMessage({
+    target: "offscreen",
+    type: "extract_pdf_text",
+    bytesBase64,
+  });
+  return result;
+}
+
 // === Message handler from content script / popup ===
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Messages destined for the offscreen doc are not for us
+  if (msg && msg.target === "offscreen") return false;
+  // The offscreen doc announces readiness — silently ignore
+  if (msg && msg.type === "offscreen_ready") return false;
+
   handleMessage(msg, sender).then(sendResponse).catch((err) => {
     sendResponse({ error: err?.message || String(err) });
   });
@@ -342,6 +391,23 @@ async function handleMessage(msg) {
           page_url: msg.pageUrl,
         }),
       });
+    }
+
+    case "extract_pdf_text": {
+      // Content script asks us to fetch+parse the PDF at msg.url.
+      // We do the fetch here (not in content script) so cross-origin
+      // PDFs and CSP-restricted pages don't block us.
+      try {
+        const r = await fetch(msg.url, { credentials: "include" });
+        if (!r.ok) {
+          return { ok: false, error: `下载 PDF 失败: HTTP ${r.status}` };
+        }
+        const buffer = await r.arrayBuffer();
+        const result = await extractPdfText(buffer);
+        return result;
+      } catch (e) {
+        return { ok: false, error: e?.message || String(e) };
+      }
     }
 
     // --- Dict Packs ---
