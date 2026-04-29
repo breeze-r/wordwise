@@ -1,42 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
-  <!-- Background: rounded square with teal gradient -->
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#0f766e"/>
-      <stop offset="100%" stop-color="#14b8a6"/>
-    </linearGradient>
-    <linearGradient id="page" x1="40" y1="24" x2="88" y2="104" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#f0fdfa"/>
-    </linearGradient>
-  </defs>
-  <rect width="128" height="128" rx="28" fill="url(#bg)"/>
-
-  <!-- Open book shape -->
-  <g transform="translate(64,64)">
-    <!-- Left page -->
-    <path d="M-4 -30 L-4 30 C-4 30 -16 26 -36 26 L-36 -26 C-16 -26 -4 -30 -4 -30Z"
-          fill="url(#page)" opacity="0.95"/>
-    <!-- Right page -->
-    <path d="M4 -30 L4 30 C4 30 16 26 36 26 L36 -26 C16 -26 4 -30 4 -30Z"
-          fill="url(#page)" opacity="0.95"/>
-    <!-- Spine shadow -->
-    <path d="M-4 -30 L-4 30" stroke="rgba(15,118,110,0.15)" stroke-width="2"/>
-    <path d="M4 -30 L4 30" stroke="rgba(15,118,110,0.15)" stroke-width="2"/>
-
-    <!-- Text lines on left page -->
-    <line x1="-30" y1="-14" x2="-12" y2="-14" stroke="#0d9488" stroke-width="2.5" stroke-linecap="round"/>
-    <line x1="-30" y1="-4" x2="-16" y2="-4" stroke="#0d9488" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
-    <line x1="-30" y1="6" x2="-14" y2="6" stroke="#0d9488" stroke-width="2.5" stroke-linecap="round" opacity="0.35"/>
-
-    <!-- Chinese character hint on right page -->
-    <text x="20" y="-8" font-family="PingFang SC, sans-serif" font-size="18" font-weight="700"
-          fill="#0f766e" text-anchor="middle" opacity="0.85">词</text>
-    <line x1="10" y1="8" x2="30" y2="8" stroke="#0d9488" stroke-width="2.5" stroke-linecap="round" opacity="0.4"/>
-  </g>
-
-  <!-- Sparkle (AI/learning accent) -->
-  <g transform="translate(96,24)" fill="#fff" opacity="0.7">
-    <path d="M0 -8 L1.5 -2 L8 0 L1.5 2 L0 8 L-1.5 2 L-8 0 L-1.5 -2 Z"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Solid teal rounded square -->
+  <rect width="128" height="128" rx="28" fill="#0d9488"/>
+  <!-- Bold W mark -->
+  <path d="M28 44 L46 86 L64 52 L82 86 L100 44"
+        fill="none" stroke="#ffffff" stroke-width="10"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Small annotation accent — the "wise" in WordWise -->
+  <circle cx="100" cy="36" r="7" fill="#5eead4"/>
 </svg>

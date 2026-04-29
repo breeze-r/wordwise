@@ -131,11 +131,11 @@
 #ww-detail .ww-dt-speak.playing {
   background: #0d9488;
   color: #fff;
-  animation: ww-pulse 0.8s ease-in-out infinite alternate;
+  animation: ww-speak-pulse 0.8s ease-in-out infinite alternate;
 }
-@keyframes ww-pulse {
+@keyframes ww-speak-pulse {
   from { transform: scale(1); }
-  to { transform: scale(1.1); }
+  to { transform: scale(1.08); }
 }
 
 /* Primary meaning (Chinese) */
@@ -380,15 +380,14 @@
     0 20px 48px rgba(15, 23, 42, 0.1);
   font-family: -apple-system, "SF Pro Display", "Segoe UI", "PingFang SC", sans-serif;
   -webkit-font-smoothing: antialiased;
-  transform-origin: top right;
-  transition: opacity 0.32s ease, transform 0.5s cubic-bezier(0.34, 1.4, 0.64, 1);
+  transition: opacity 0.25s ease, transform 0.25s ease;
   opacity: 0;
-  transform: translateY(-12px) translateX(8px) scale(0.94);
+  transform: translateY(8px);
   pointer-events: none;
 }
 #ww-summary.ww-show {
   opacity: 1;
-  transform: translateY(0) translateX(0) scale(1);
+  transform: translateY(0);
   pointer-events: auto;
 }
 #ww-summary::-webkit-scrollbar {
@@ -561,7 +560,7 @@
 /* Pending section placeholder */
 #ww-summary .ww-sum-section-pending .ww-sum-section-dot-pending {
   background: #e2e8f0;
-  animation: ww-pulse 1.4s ease-in-out infinite;
+  animation: ww-pulse-soft 1.4s ease-in-out infinite;
 }
 #ww-summary .ww-sum-skeleton-heading {
   height: 12px;
@@ -594,76 +593,70 @@
 #ww-summary .ww-sum-section-pending:nth-of-type(4) .ww-sum-skeleton,
 #ww-summary .ww-sum-section-pending:nth-of-type(4) .ww-sum-section-dot-pending { animation-delay: 0.45s; }
 
+/* === Animations: minimal set (5 keyframes total) ===
+ * 1. ww-shimmer    — skeleton loading state
+ * 2. ww-fade-in    — used by sections & token reveal (DRY)
+ * 3. ww-progress   — top progress bar during streaming
+ * 4. ww-thinking   — three "AI thinking" dots in header
+ * 5. ww-pulse-soft — section dot subtle pulse while pending
+ */
+
 @keyframes ww-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
-@keyframes ww-pulse {
+
+@keyframes ww-pulse-soft {
   0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
+  50% { opacity: 0.85; }
 }
 
-/* Real section fade-in as it streams in (replaces a placeholder) */
+@keyframes ww-fade-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ww-progress {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes ww-thinking {
+  0%, 100% { opacity: 0.3; }
+  50%      { opacity: 1; }
+}
+
+/* Section enters when streaming brings it in. Just a quiet fade — no
+   blur, no scale, no bounce. */
 #ww-summary .ww-sum-section-enter {
-  animation: ww-section-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-@keyframes ww-section-in {
-  0%   { opacity: 0; transform: translateX(-12px) scale(0.97); filter: blur(2px); }
-  60%  { opacity: 1; filter: blur(0); }
-  100% { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
+  animation: ww-fade-in 0.32s ease-out both;
 }
 
-/* Section dot heartbeat-pop when a real section appears */
-#ww-summary .ww-sum-section-enter .ww-sum-section-dot {
-  animation: ww-dot-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both 0.1s;
-}
-@keyframes ww-dot-pop {
-  0%   { transform: scale(0); opacity: 0; }
-  50%  { transform: scale(1.5); opacity: 1; box-shadow: 0 0 0 4px rgba(13,148,136,0.18); }
-  100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(13,148,136,0); }
-}
-
-/* === Streaming-mode flourishes (only while .ww-loading on FAB / .ww-streaming on panel) === */
-
-/* Top progress bar — sits inside the header, visible while generating */
+/* Top progress bar — flat teal stripe sweeping while generating. */
 #ww-summary .ww-sum-progress {
   position: absolute;
   left: 0; right: 0; bottom: -1px;
   height: 2px;
   pointer-events: none;
   overflow: hidden;
-  border-radius: 0 0 2px 2px;
   background: rgba(13,148,136,0.06);
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity 0.3s ease;
 }
-#ww-summary.ww-streaming .ww-sum-progress {
-  opacity: 1;
-}
+#ww-summary.ww-streaming .ww-sum-progress { opacity: 1; }
 #ww-summary .ww-sum-progress::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent 0%, #14b8a6 30%, #5eead4 50%, #14b8a6 70%, transparent 100%);
+  background: linear-gradient(90deg, transparent, #14b8a6, transparent);
   transform: translateX(-100%);
-  animation: ww-progress-sweep 1.4s linear infinite;
-}
-@keyframes ww-progress-sweep {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  animation: ww-progress 1.3s linear infinite;
 }
 
-/* Brand icon — gentle sparkle/glow while generating */
+/* Header — anchor for the absolute-positioned progress bar. */
 #ww-summary .ww-sum-header { position: relative; }
-#ww-summary.ww-streaming .ww-sum-brand svg {
-  animation: ww-icon-pulse 2.4s ease-in-out infinite;
-}
-@keyframes ww-icon-pulse {
-  0%, 100% { filter: drop-shadow(0 0 0 rgba(13,148,136,0)); transform: scale(1); }
-  50%      { filter: drop-shadow(0 0 6px rgba(13,148,136,0.55)); transform: scale(1.06); }
-}
 
-/* "Overview" wordmark — append three pulsing dots during streaming */
+/* Three "thinking" dots after "Overview" — only visible while streaming. */
 #ww-summary .ww-sum-thinking {
   display: none;
   align-items: center;
@@ -672,18 +665,13 @@
 }
 #ww-summary.ww-streaming .ww-sum-thinking { display: inline-flex; }
 #ww-summary .ww-sum-thinking span {
-  width: 4px; height: 4px;
+  width: 3px; height: 3px;
   border-radius: 50%;
   background: #14b8a6;
-  opacity: 0.35;
-  animation: ww-thinking-dot 1.2s ease-in-out infinite;
+  animation: ww-thinking 1.2s ease-in-out infinite;
 }
-#ww-summary .ww-sum-thinking span:nth-child(2) { animation-delay: 0.15s; }
-#ww-summary .ww-sum-thinking span:nth-child(3) { animation-delay: 0.3s; }
-@keyframes ww-thinking-dot {
-  0%, 100% { opacity: 0.25; transform: translateY(0); }
-  50%      { opacity: 1; transform: translateY(-2px); }
-}
+#ww-summary .ww-sum-thinking span:nth-child(2) { animation-delay: 0.2s; }
+#ww-summary .ww-sum-thinking span:nth-child(3) { animation-delay: 0.4s; }
 
 /* === Math (KaTeX) styling inside summary panel === */
 #ww-summary .ww-math {
@@ -716,28 +704,13 @@
   border-radius: 3px;
 }
 
-/* Word-by-word reveal for title / overview / points */
+/* Token-by-token reveal — reuses ww-fade-in, just opacity + tiny rise.
+   No blur, no bounce, no scale. Stagger delay shorter so it feels
+   responsive rather than typewritery. */
 #ww-summary .ww-tok {
   display: inline-block;
-  opacity: 0;
-  filter: blur(3px);
-  transform: translateY(4px);
-  animation: ww-tok-in 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-@keyframes ww-tok-in {
-  to { opacity: 1; filter: blur(0); transform: translateY(0); }
-}
-/* Soften reveal speed — chained delays via CSS variables */
-#ww-summary .ww-tok { animation-delay: calc(var(--i, 0) * 22ms); }
-
-/* When skeleton turns into real text — gentle crossfade for the wrapper */
-#ww-summary .ww-sum-title:not(.ww-sum-title-pending),
-#ww-summary .ww-sum-overview:not(.ww-sum-overview-pending) {
-  animation: ww-skel-resolve 0.4s ease both;
-}
-@keyframes ww-skel-resolve {
-  from { background: #f1f5f9; border-radius: 6px; }
-  to   { background: transparent; border-radius: 0; }
+  animation: ww-fade-in 0.25s ease-out both;
+  animation-delay: calc(var(--i, 0) * 14ms);
 }
 
 /* Error state */
@@ -796,18 +769,10 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+/* FAB while loading — flat opacity dim, no bounce. */
 #ww-summary-fab.ww-loading {
-  animation: ww-fab-breathe 1.6s ease-in-out infinite;
-}
-@keyframes ww-fab-breathe {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 4px 12px rgba(13, 148, 136, 0.25);
-  }
-  50% {
-    transform: scale(1.06);
-    box-shadow: 0 6px 20px rgba(13, 148, 136, 0.45);
-  }
+  opacity: 0.7;
+  cursor: progress;
 }
 #ww-summary-fab .ww-fab-badge {
   position: absolute;
