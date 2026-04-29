@@ -26,21 +26,12 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* ── Header ── */
+  /* ── Header ── flat solid teal, no gradient or radial highlight. */
   .header {
-    background: linear-gradient(135deg, #0f766e 0%, #0d9488 50%, #14b8a6 100%);
+    background: #0d9488;
     color: #fff;
     padding: 20px 24px 18px;
     position: relative;
-    overflow: hidden;
-  }
-  .header::after {
-    content: "";
-    position: absolute;
-    top: -40%; right: -20%;
-    width: 160px; height: 160px;
-    background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%);
-    border-radius: 50%;
   }
   .header-top {
     display: flex;
@@ -56,12 +47,11 @@
   }
   .brand-icon {
     width: 28px; height: 28px;
-    background: rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.18);
     border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    backdrop-filter: blur(4px);
   }
   .brand-icon svg {
     width: 18px; height: 18px;
@@ -102,21 +92,17 @@
     border: none;
     border-radius: 10px;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     font-family: inherit;
   }
   .btn-primary {
     background: #0d9488;
     color: #fff;
-    box-shadow: 0 1px 3px rgba(13,148,136,0.3);
   }
-  .btn-primary:hover {
-    background: #0f766e;
-    box-shadow: 0 4px 12px rgba(13,148,136,0.25);
-    transform: translateY(-0.5px);
-  }
+  .btn-primary:hover { background: #0f766e; }
+  .btn-primary:active { background: #115e59; }
   /* ── Dashboard ── */
   .dashboard { display: none; }
 
@@ -134,11 +120,11 @@
     border-radius: 10px;
     padding: 12px 4px 10px;
     border: 1px solid #e2e8f0;
-    box-shadow: 0 1px 2px rgba(15,23,42,0.04);
-    transition: box-shadow 0.15s;
+    transition: border-color 0.15s ease, background 0.15s ease;
   }
   .stat:hover {
-    box-shadow: 0 4px 12px rgba(15,23,42,0.08);
+    border-color: #cbd5e1;
+    background: #f8fafc;
   }
   .stat .num {
     font-size: 20px;

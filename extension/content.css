@@ -272,52 +272,44 @@
   margin-bottom: 10px;
 }
 
-/* Action buttons row */
+/* Action buttons row — flat, no 3D lift, no shadow gradient. */
 #ww-detail .ww-dt-actions {
   display: flex;
   gap: 6px;
 }
 #ww-detail .ww-dt-actions button {
   flex: 1;
-  border: none;
+  border: 1px solid transparent;
   padding: 8px 10px;
   border-radius: 8px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   font-family: inherit;
-  transition: all 0.15s;
-}
-#ww-detail .ww-dt-actions button:hover {
-  transform: translateY(-0.5px);
-}
-#ww-detail .ww-dt-actions button:active {
-  transform: translateY(0);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 #ww-detail .ww-btn-add {
   background: #0d9488;
   color: #fff;
-  box-shadow: 0 1px 3px rgba(13, 148, 136, 0.3);
 }
-#ww-detail .ww-btn-add:hover {
-  background: #0f766e;
-  box-shadow: 0 3px 10px rgba(13, 148, 136, 0.25);
-}
+#ww-detail .ww-btn-add:hover { background: #0f766e; }
+#ww-detail .ww-btn-add:active { background: #115e59; }
+
 #ww-detail .ww-btn-know {
   background: #f1f5f9;
   color: #334155;
 }
-#ww-detail .ww-btn-know:hover {
-  background: #e2e8f0;
-}
+#ww-detail .ww-btn-know:hover { background: #e2e8f0; }
+
 #ww-detail .ww-btn-ignore {
   background: transparent;
   color: #94a3b8;
-  border: 1px solid #e2e8f0;
+  border-color: #e2e8f0;
 }
 #ww-detail .ww-btn-ignore:hover {
   background: #f8fafc;
   color: #64748b;
+  border-color: #cbd5e1;
 }
 
 /* ── Top banner (LLM warnings) ── */
@@ -325,17 +317,15 @@
   position: fixed;
   top: 0; left: 0; right: 0;
   z-index: 2147483646;
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  background: #d97706;
   color: #fff;
   text-align: center;
   padding: 10px 44px 10px 16px;
   font-size: 13px;
   font-family: -apple-system, "SF Pro Display", "Segoe UI", "PingFang SC", sans-serif;
-  box-shadow:
-    0 2px 8px rgba(217, 119, 6, 0.2),
-    0 6px 20px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
   transform: translateY(-100%);
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.25s ease;
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
 }
@@ -722,7 +712,9 @@
   line-height: 1.6;
 }
 
-/* FAB trigger button */
+/* FAB trigger button — flat solid teal, single subtle shadow.
+   Floating element so it gets a small shadow for depth context,
+   but no gradient, no scale, no shadow-grow on hover. */
 #ww-summary-fab {
   position: fixed;
   bottom: 24px;
@@ -732,34 +724,23 @@
   height: 44px;
   border-radius: 14px;
   border: none;
-  background: linear-gradient(135deg, #0f766e 0%, #0d9488 50%, #14b8a6 100%);
+  background: #0d9488;
   color: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow:
-    0 2px 8px rgba(13, 148, 136, 0.3),
-    0 8px 24px rgba(13, 148, 136, 0.15);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+  transition: background 0.15s ease, opacity 0.2s ease;
   opacity: 0;
-  transform: scale(0.8);
   pointer-events: none;
 }
 #ww-summary-fab.ww-show {
   opacity: 1;
-  transform: scale(1);
   pointer-events: auto;
 }
-#ww-summary-fab:hover {
-  transform: scale(1.06);
-  box-shadow:
-    0 4px 12px rgba(13, 148, 136, 0.35),
-    0 12px 32px rgba(13, 148, 136, 0.2);
-}
-#ww-summary-fab:active {
-  transform: scale(0.97);
-}
+#ww-summary-fab:hover { background: #0f766e; }
+#ww-summary-fab:active { background: #115e59; }
 #ww-summary-fab svg {
   width: 22px;
   height: 22px;
