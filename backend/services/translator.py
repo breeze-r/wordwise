@@ -44,6 +44,46 @@ def _normalize_chat_api_url(raw_url: str) -> str:
     return value
 
 
+# Hosts that are reachable directly from mainland China without any proxy.
+# We bypass the system proxy for these — going through a proxy adds latency,
+# wastes proxy bandwidth, and (most importantly) means proxy outages knock
+# out LLM requests that don't need a proxy in the first place.
+_DIRECT_LLM_HOSTS = (
+    "api.deepseek.com",
+    "api.moonshot.cn",
+    "open.bigmodel.cn",
+    "dashscope.aliyuncs.com",
+    "api.siliconflow.cn",
+    "ark.cn-beijing.volces.com",
+    "qianfan.baidubce.com",
+    "spark-api.xf-yun.com",
+    "open.feishu.cn",
+    "api.minimax.chat",
+)
+
+
+def _make_http_client(api_url: str, *, timeout: httpx.Timeout) -> httpx.AsyncClient:
+    """Create an httpx client, bypassing system proxy for mainland LLM endpoints.
+
+    Otherwise: a flaky 1082 proxy will randomly 503 requests to api.deepseek.com
+    even though api.deepseek.com itself responds in <1s when contacted directly.
+    """
+    try:
+        from urllib.parse import urlparse
+        host = (urlparse(api_url).hostname or "").lower()
+    except Exception:
+        host = ""
+
+    if host in _DIRECT_LLM_HOSTS:
+        # Force no proxy for this host — overrides HTTPS_PROXY env var.
+        return httpx.AsyncClient(
+            timeout=timeout,
+            mounts={"all://": httpx.AsyncHTTPTransport(proxy=None)},
+        )
+    # Default: respect system proxy (needed for OpenAI / Anthropic / NVIDIA from CN).
+    return httpx.AsyncClient(timeout=timeout)
+
+
 def _build_extra_payload(model: str) -> dict:
     """Provider-specific payload extras to fix common gotchas.
 
@@ -188,7 +228,7 @@ async def _chat_completion(
     for attempt in range(1 + max_retries):
         try:
             timeout = httpx.Timeout(timeout_seconds, connect=10.0)
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with _make_http_client(config.api_url, timeout=timeout) as client:
                 resp = await client.post(
                     config.api_url,
                     headers={
@@ -498,7 +538,7 @@ async def summarize_article_stream(
         output_buffer = ""
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with _make_http_client(config.api_url, timeout=timeout) as client:
                 async with client.stream("POST", config.api_url, headers=headers, json=payload) as resp:
                     if resp.status_code >= 400:
                         body = (await resp.aread()).decode("utf-8", errors="replace")[:500]
