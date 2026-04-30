@@ -892,21 +892,38 @@ async def batch_translate(
 async def _translate_sentence(
     sentence: str, overrides: dict[str, str] | None = None
 ) -> str | None:
-    """轻量级 LLM 调用：只翻译一个句子为中文。"""
-    context = sentence.strip()[:300]
+    """轻量级 LLM 调用：翻译完整段落上下文为中文。
+
+    这里 "sentence" 实际上是 content.js 抽取的整段语境（含目标词所在
+    句子 + 前后文），完整翻译能让用户在详情面板看到一整段通顺中文，
+    而不是断到一半的残片。
+    """
+    context = sentence.strip()
     if not context:
         return None
-    prompt = f'将以下英文翻译为通顺的中文，只返回翻译结果，不要任何解释：\n\n"{context}"'
+    # Hard cap to prevent runaway prompts but generous enough for a full
+    # paragraph (~600-800 English chars / 200-300 Chinese chars typical).
+    if len(context) > 1200:
+        context = context[:1200]
+
+    prompt = (
+        "Translate the following English text into fluent Chinese. "
+        "Translate the ENTIRE text — do not stop partway. "
+        "Return only the translation, no explanation, no quotes:\n\n"
+        f"{context}"
+    )
+    # max_tokens scales with input — Chinese output is ~0.5x the chars
+    # but tokens for Chinese are higher, so generous budget.
     result = await _chat_completion(
         prompt,
         overrides=overrides,
         parse_json=False,
-        max_retries=0,
-        max_tokens=500,
-        timeout_seconds=12.0,
+        max_retries=1,
+        max_tokens=1500,
+        timeout_seconds=30.0,
     )
     if isinstance(result, str):
-        cleaned = result.strip().strip('"').strip()
+        cleaned = result.strip().strip('"').strip("「").strip("」").strip()
         return cleaned if cleaned else None
     return None
 

@@ -314,10 +314,15 @@
       nodeOrElement?.nodeType === Node.ELEMENT_NODE
         ? nodeOrElement
         : nodeOrElement?.parentElement;
-    const text =
-      element?.closest("p, li, td, div, h1, h2, h3, h4, h5, h6, article, section, blockquote")
-        ?.textContent || element?.textContent || "";
-    return text.trim().slice(0, 240);
+    // Walk up to the nearest block-level container so we get the *whole*
+    // paragraph rather than just the inline text node the user clicked.
+    const container = element?.closest(
+      "p, li, td, div, h1, h2, h3, h4, h5, h6, article, section, blockquote"
+    );
+    const text = container?.textContent || element?.textContent || "";
+    // Send up to 1000 chars — enough for a typical news/financial paragraph.
+    // Backend's _translate_sentence caps further at 1200 if needed.
+    return text.trim().slice(0, 1000);
   }
 
   function escapeHtml(value) {
