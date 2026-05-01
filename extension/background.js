@@ -259,7 +259,7 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
-async function handleMessage(msg) {
+async function handleMessage(msg, sender) {
   switch (msg.type) {
     case "get_user": {
       return await apiRequest("/api/auth/me");
@@ -273,6 +273,66 @@ async function handleMessage(msg) {
     case "set_enabled": {
       await chrome.storage.local.set({ enabled: msg.enabled });
       return { ok: true };
+    }
+
+    // --- Per-site overrides (Plan 1: manual; Plan 3: smart auto) ---
+    case "get_domain_override": {
+      const { domainOverrides = {} } = await chrome.storage.local.get("domainOverrides");
+      return { value: domainOverrides[msg.hostname] || "auto" };
+    }
+
+    case "set_domain_override": {
+      const { domainOverrides = {} } = await chrome.storage.local.get("domainOverrides");
+      const value = msg.value;
+      if (value === "auto") {
+        delete domainOverrides[msg.hostname];
+      } else if (value === "on" || value === "off") {
+        domainOverrides[msg.hostname] = value;
+      }
+      await chrome.storage.local.set({ domainOverrides });
+      // Notify the matching tab to re-init (reloads the page).
+      try {
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+          if (!tab.url) continue;
+          try {
+            const u = new URL(tab.url);
+            const h = u.hostname.toLowerCase().replace(/^www\./, "");
+            if (h === msg.hostname) {
+              chrome.tabs.sendMessage(tab.id, { type: "wordwise_site_state_changed" }).catch(() => {});
+            }
+          } catch { /* skip non-url tabs */ }
+        }
+      } catch { /* noop */ }
+      return { ok: true, value };
+    }
+
+    case "get_all_domain_overrides": {
+      const { domainOverrides = {} } = await chrome.storage.local.get("domainOverrides");
+      return domainOverrides;
+    }
+
+    // Content scripts post their decision so popup can read it without
+    // re-running the assessment in another context.
+    case "set_page_state": {
+      // Tag with tabId so popup looks up THIS tab's state, not a stale one.
+      const tabId = sender?.tab?.id;
+      if (typeof tabId !== "number") return { ok: false };
+      const { pageStates = {} } = await chrome.storage.local.get("pageStates");
+      pageStates[String(tabId)] = msg.pageState;
+      // Trim to last 50 entries to avoid unbounded growth on heavy users.
+      const keys = Object.keys(pageStates);
+      if (keys.length > 50) {
+        for (const k of keys.slice(0, keys.length - 50)) delete pageStates[k];
+      }
+      await chrome.storage.local.set({ pageStates });
+      return { ok: true };
+    }
+
+    case "get_page_state": {
+      const tabId = msg.tabId;
+      const { pageStates = {} } = await chrome.storage.local.get("pageStates");
+      return pageStates[String(tabId)] || null;
     }
 
     case "get_api_base": {

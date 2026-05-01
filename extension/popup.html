@@ -365,6 +365,84 @@
   }
   .backend-edit-panel .section-status { padding-left: 0; }
 
+  /* === Site state card === */
+  .site-card {
+    margin: 0 16px 8px;
+    padding: 12px 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 12px;
+    color: #475569;
+  }
+  .site-card .site-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 18px;
+  }
+  .site-domain {
+    font-weight: 600;
+    color: #0f172a;
+    font-size: 13px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: -apple-system, "SF Mono", monospace;
+  }
+  .site-state-pill {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    font-weight: 500;
+  }
+  .site-state-pill.on {
+    background: #ccfbf1; color: #0f766e;
+  }
+  .site-state-pill.off {
+    background: #fee2e2; color: #b91c1c;
+  }
+  .site-state-pill.skip {
+    background: #f1f5f9; color: #64748b;
+  }
+  .site-reason {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-top: 6px;
+    line-height: 1.4;
+  }
+  /* Three-way segmented control */
+  .site-seg {
+    display: flex;
+    margin-top: 10px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 2px;
+    gap: 0;
+  }
+  .site-seg button {
+    flex: 1;
+    padding: 6px 8px;
+    border: none;
+    background: transparent;
+    font-size: 11px;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    border-radius: 6px;
+    font-family: inherit;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .site-seg button:hover { background: #f1f5f9; }
+  .site-seg button.active {
+    background: #0d9488;
+    color: #fff;
+  }
+  .site-seg button.active:hover { background: #0d9488; }
+
   /* Chips (shared for level & packs) */
   .chip-grid {
     display: flex;
@@ -588,6 +666,20 @@
   <div class="backend-edit-panel" id="backendEditPanel" hidden>
     <input id="backendUrl" type="text" placeholder="http://localhost:8000" autocomplete="off" />
     <div class="section-status" id="backendStatus"></div>
+  </div>
+
+  <!-- Per-site state card -->
+  <div class="site-card" id="siteCard" hidden>
+    <div class="site-row">
+      <span class="site-domain" id="siteDomain">—</span>
+      <span class="site-state-pill" id="siteStatePill">—</span>
+    </div>
+    <div class="site-reason" id="siteReason"></div>
+    <div class="site-seg" id="siteSeg">
+      <button data-mode="auto" title="智能判定 — 大多数情况选这个">自动</button>
+      <button data-mode="on" title="强制启用 — 即使页面看起来不像阅读型">总是开</button>
+      <button data-mode="off" title="完全跳过 — 节省 token">总是关</button>
+    </div>
   </div>
 
   <div class="section">

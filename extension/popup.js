@@ -292,11 +292,93 @@ function updateLlmStatus(status, detail = "") {
   }
 }
 
+// === Site state card ============================================
+async function getActiveTabHostname() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url) return { tabId: null, hostname: null };
+    const url = new URL(tab.url);
+    if (!/^https?:$/.test(url.protocol)) return { tabId: tab.id, hostname: null };
+    return { tabId: tab.id, hostname: url.hostname.toLowerCase().replace(/^www\./, "") };
+  } catch (e) {
+    return { tabId: null, hostname: null };
+  }
+}
+
+async function loadSiteCard() {
+  const card = $("siteCard");
+  if (!card) return;
+  const { tabId, hostname } = await getActiveTabHostname();
+  if (!hostname) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  $("siteDomain").textContent = hostname;
+
+  // Read current page state captured by content script
+  const state = tabId != null
+    ? await sendMsg({ type: "get_page_state", tabId })
+    : null;
+
+  // Read user override
+  const ov = await sendMsg({ type: "get_domain_override", hostname });
+  const mode = ov?.value || "auto";
+
+  // Update segmented control
+  $("siteSeg").querySelectorAll("button").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.mode === mode);
+  });
+
+  // Compute pill + reason
+  const pill = $("siteStatePill");
+  const reasonEl = $("siteReason");
+  if (mode === "off") {
+    pill.className = "site-state-pill off";
+    pill.textContent = "已禁用";
+    reasonEl.textContent = "WordWise 在此站点完全跳过，不消耗 token。";
+  } else if (mode === "on") {
+    pill.className = "site-state-pill on";
+    pill.textContent = "已强制启用";
+    reasonEl.textContent = "即使页面不像阅读型，也会扫描标注。";
+  } else {
+    // auto
+    if (!state) {
+      pill.className = "site-state-pill skip";
+      pill.textContent = "未检测";
+      reasonEl.textContent = "刷新页面后查看检测结果。";
+    } else if (state.runnable) {
+      pill.className = "site-state-pill on";
+      pill.textContent = "运行中";
+      reasonEl.textContent = state.reason || "符合阅读条件。";
+    } else {
+      pill.className = "site-state-pill skip";
+      pill.textContent = "已跳过";
+      reasonEl.textContent = (state.reason || "不符合阅读条件") + " — 想用就点「总是开」。";
+    }
+  }
+}
+
+async function setSiteOverride(hostname, mode) {
+  await sendMsg({ type: "set_domain_override", hostname, value: mode });
+  // Local re-render — content script will reload itself via tab message
+  await loadSiteCard();
+}
+
+$("siteSeg")?.addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-mode]");
+  if (!btn) return;
+  const { hostname } = await getActiveTabHostname();
+  if (!hostname) return;
+  await setSiteOverride(hostname, btn.dataset.mode);
+});
+
 async function loadDashboard() {
   showView("dashboard");
   setSettingsStatus("");
 
   // Load local profile
+  await loadSiteCard();
   await loadBackendUrl();
   updateBackendStatus("checking");
   const user = await sendMsg({ type: "get_user" });

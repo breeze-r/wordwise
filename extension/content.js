@@ -1640,14 +1640,167 @@
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
+  // === Site eligibility ============================================
+  // Decide whether the extension should run on the current page.
+  // Combines:
+  //   1. user override (per-domain "on" / "off")
+  //   2. smart auto-detection (skip non-reading pages by default)
+
+  /**
+   * URL-based hard skip list — applied even when content is text-heavy.
+   * These are sites where annotation/summary clearly isn't the use case
+   * (auth flows, dashboards, code review, IM, e-commerce checkout).
+   */
+  function urlLooksNonReadable(url, hostname) {
+    const path = url.pathname || "";
+    if (/\b(login|signin|signup|register|checkout|cart|payment|admin|dashboard|settings|account|edit|compose)\b/i.test(path)) {
+      return "操作型页面";
+    }
+    // Tool/utility apps where text is mostly UI labels
+    const TOOL_HOSTS = [
+      "github.com", "gitlab.com", "bitbucket.org",
+      "figma.com", "notion.so", "linear.app",
+      "slack.com", "discord.com",
+      "mail.google.com", "outlook.com", "outlook.live.com",
+      "calendar.google.com", "drive.google.com", "docs.google.com",
+      "trello.com", "asana.com", "monday.com",
+    ];
+    // Video / shopping / social-feed sites (mostly Chinese content too)
+    const FEED_HOSTS = [
+      "youtube.com", "youtu.be",
+      "bilibili.com", "weibo.com", "xiaohongshu.com",
+      "twitter.com", "x.com",
+      "taobao.com", "tmall.com", "jd.com", "amazon.com",
+      "instagram.com", "facebook.com", "tiktok.com",
+    ];
+    const baseHost = hostname.replace(/^www\./, "");
+    if (TOOL_HOSTS.includes(baseHost)) return "工具/协作类网站";
+    if (FEED_HOSTS.some(h => baseHost === h || baseHost.endsWith("." + h))) return "信息流/电商网站";
+    if (baseHost === "localhost" || baseHost === "127.0.0.1" || baseHost.endsWith(".local")) {
+      return "本地开发环境";
+    }
+    return null;
+  }
+
+  /**
+   * DOM-based readability check. Cheap — only DOM measurement, no LLM.
+   * Returns { runnable: bool, reason: string }
+   */
+  function assessPageReadability() {
+    // PDF pages: handled separately (FAB shown for summary, but no scan)
+    if (isPdfPage()) {
+      return { runnable: true, reason: "PDF", isPdf: true };
+    }
+
+    const url = new URL(window.location.href);
+    const hostname = url.hostname.toLowerCase();
+
+    const urlSkipReason = urlLooksNonReadable(url, hostname);
+    if (urlSkipReason) {
+      return { runnable: false, reason: urlSkipReason };
+    }
+
+    // Measure body text — sample first 50 paragraph-ish blocks
+    const body = document.body;
+    if (!body) return { runnable: false, reason: "无内容" };
+
+    const blocks = body.querySelectorAll("p, li, article, section, blockquote, h1, h2, h3");
+    let text = "";
+    let count = 0;
+    for (const el of blocks) {
+      if (count >= 50) break;
+      const t = (el.textContent || "").trim();
+      if (t.length < 20) continue;
+      text += t + "\n";
+      count++;
+    }
+    // Fallback: if no paragraph-like blocks, use whole body text (capped)
+    if (!text) {
+      text = (body.textContent || "").trim().slice(0, 5000);
+    }
+
+    if (text.length < 500) {
+      return { runnable: false, reason: "文字太少（不像阅读型页面）" };
+    }
+
+    // Count Chinese vs English chars to detect predominantly-Chinese pages
+    let cn = 0, en = 0;
+    for (const ch of text) {
+      const code = ch.codePointAt(0);
+      if (code >= 0x4e00 && code <= 0x9fff) cn++;
+      else if ((code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a)) en++;
+    }
+    const total = cn + en;
+    if (total < 200) {
+      return { runnable: false, reason: "可识别字符过少" };
+    }
+    const cnRatio = cn / total;
+    if (cnRatio > 0.7) {
+      return { runnable: false, reason: `中文为主（${Math.round(cnRatio * 100)}%）` };
+    }
+
+    // Count distinct English words — articles usually have 200+
+    const words = text.toLowerCase().match(/[a-z]{2,}/g) || [];
+    if (words.length < 100) {
+      return { runnable: false, reason: "英文词数过少" };
+    }
+
+    return { runnable: true, reason: `${words.length} 个英文词，中文占 ${Math.round(cnRatio * 100)}%` };
+  }
+
+  /**
+   * Final eligibility — applies per-domain override on top of auto detection.
+   * Posts the result back to background so the popup can show why we
+   * skipped the current page.
+   */
+  async function decideRunStrategy() {
+    const url = new URL(window.location.href);
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    const override = await sendMsg({ type: "get_domain_override", hostname });
+    const auto = assessPageReadability();
+
+    let decision;
+    if (override?.value === "off") {
+      decision = { runnable: false, reason: "已在此站点禁用", source: "override-off", auto, hostname };
+    } else if (override?.value === "on") {
+      decision = { runnable: true, reason: "已在此站点启用", source: "override-on", auto, hostname };
+    } else {
+      decision = { ...auto, source: "auto", hostname };
+    }
+    // Cache the decision so popup can read it
+    await sendMsg({ type: "set_page_state", pageState: decision });
+    return decision;
+  }
+
   // === Init ===
   async function init() {
+    // Always listen for popup-driven site state changes — even on skipped
+    // pages so the user can flip the toggle without a manual reload.
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg?.type === "wordwise_site_state_changed") {
+        window.location.reload();
+      }
+    });
+
     const { enabled } = await sendMsg({ type: "get_enabled" });
     isEnabled = enabled;
     if (!isEnabled) return;
 
+    const decision = await decideRunStrategy();
+    if (!decision.runnable) {
+      // Skip the heavy lifting (no FAB, no scan, no listeners).
+      // We still consumed ~10ms of DOM measurement — that's the cost.
+      return;
+    }
+
     setupListeners();
     initSummaryFab();
+    if (decision.isPdf) {
+      // PDFs: FAB shown for summary, but no word-scanning (single <embed>,
+      // no DOM text to walk).
+      return;
+    }
+
     setTimeout(async () => {
       await scanPage();
       observeDynamicContent();
