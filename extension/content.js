@@ -658,6 +658,7 @@
   }
 
   async function lookupWord(word, sentence, triggerCycle) {
+    if (!isEnabled) return { error: "disabled" };
     const result = await sendMsg({
       type: "lookup_word",
       word,
@@ -672,6 +673,7 @@
   }
 
   async function showDetailForAnnotation(el) {
+    if (!isEnabled) return;
     const rect = el.getBoundingClientRect();
     const word = el.dataset.wwWord;
     const entry = getAnnotationEntry(word) || { brief: el.dataset.wwChinese || "", meanings: [] };
@@ -732,6 +734,7 @@
   }
 
   function getSelectionPayload() {
+    if (!isEnabled) return null;
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
 
@@ -751,6 +754,7 @@
   }
 
   async function handleSelectionLookup() {
+    if (!isEnabled) return;
     const payload = getSelectionPayload();
     if (!payload) return;
 
@@ -804,6 +808,7 @@
   // === Event listeners ===
   function setupListeners() {
     document.body.addEventListener("click", (event) => {
+      if (!isEnabled) return;
       const cn = event.target.closest(".ww-cn");
       if (cn) {
         event.preventDefault();
@@ -888,6 +893,7 @@
     });
 
     document.addEventListener("mouseup", () => {
+      if (!isEnabled) return;
       clearTimeout(selectionLookupTimer);
       selectionLookupTimer = setTimeout(() => {
         void handleSelectionLookup();
@@ -947,6 +953,29 @@
     _articleRoot = null; // 重新检测文章区域
   }
 
+  function disableWordWiseOnPage() {
+    isEnabled = false;
+    clearTimeout(selectionLookupTimer);
+    clearTimeout(scanTimeout);
+    selectionLookupTimer = null;
+    scanTimeout = null;
+    scanQueued = false;
+    isScanning = false;
+    dynamicObserver?.disconnect();
+    dynamicObserver = null;
+    clearAllAnnotations();
+    stopPronunciation();
+    detailPanel?.remove();
+    detailPanel = null;
+    currentDetailWord = null;
+    dismissLlmWarning();
+    summaryPanel?.remove();
+    summaryPanel = null;
+    summaryFab?.remove();
+    summaryFab = null;
+    summaryData = null;
+  }
+
   async function rescanPage() {
     clearAllAnnotations();
     await scanPage();
@@ -956,6 +985,16 @@
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === "rescan_page") {
       rescanPage().then(() => sendResponse({ ok: true }));
+      return true;
+    }
+    if (msg.type === "wordwise_enabled_changed") {
+      if (msg.enabled === false) {
+        disableWordWiseOnPage();
+        sendResponse({ ok: true });
+      } else {
+        sendResponse({ ok: true });
+        window.location.reload();
+      }
       return true;
     }
   });
@@ -1615,8 +1654,10 @@
 
   // === Dynamic content ===
   let scanTimeout = null;
+  let dynamicObserver = null;
   function observeDynamicContent() {
-    const observer = new MutationObserver((mutations) => {
+    if (dynamicObserver) return;
+    dynamicObserver = new MutationObserver((mutations) => {
       let hasNew = false;
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
@@ -1637,7 +1678,7 @@
         void scanPage();
       }, SCAN_DEBOUNCE_MS);
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    dynamicObserver.observe(document.body, { childList: true, subtree: true });
   }
 
   // === Site eligibility ============================================

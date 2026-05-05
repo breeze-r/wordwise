@@ -9,6 +9,11 @@ const DEFAULT_TRANSLATOR_CONFIG = {
 function sendMsg(msg) {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(msg, (res) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        resolve({ error: lastError.message || "runtime message failed" });
+        return;
+      }
       resolve(res || { error: "no response" });
     });
   });
@@ -223,22 +228,7 @@ function syncTranslatorFields() {
   }
 }
 
-async function loadBackendUrl() {
-  const baseResult = await sendMsg({ type: "get_api_base" });
-  if (baseResult?.apiBase) {
-    $("backendUrl").value = baseResult.apiBase;
-    $("backendUrlText").textContent = baseResult.apiBase.replace(/^https?:\/\//, "");
-  }
-}
-
-function updateBackendStatus(state, message) {
-  // state: "ok" | "error" | "checking"
-  const dot = $("backendDot");
-  const text = $("backendText");
-  if (!dot || !text) return;
-  dot.className = "backend-dot" + (state === "ok" ? " ok" : state === "error" ? " error" : "");
-  text.textContent = message || (state === "ok" ? "后端服务正常" : state === "error" ? "后端无法连接" : "后端连接中…");
-}
+// (Backend URL UI removed — extension is now pure frontend, no backend needed.)
 
 async function loadTranslatorConfig() {
   const config = await sendMsg({ type: "get_translator_config" });
@@ -293,6 +283,8 @@ function updateLlmStatus(status, detail = "") {
 }
 
 // === Site state card ============================================
+let currentSiteHostname = null;
+
 async function getActiveTabHostname() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -305,10 +297,27 @@ async function getActiveTabHostname() {
   }
 }
 
+function setSiteSegActive(mode) {
+  const seg = $("siteSeg");
+  if (!seg) return;
+  seg.querySelectorAll("button").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.mode === mode);
+  });
+}
+
+function setSiteSegPending(pending) {
+  const seg = $("siteSeg");
+  if (!seg) return;
+  seg.querySelectorAll("button").forEach((btn) => {
+    btn.disabled = pending;
+  });
+}
+
 async function loadSiteCard() {
   const card = $("siteCard");
   if (!card) return;
   const { tabId, hostname } = await getActiveTabHostname();
+  currentSiteHostname = hostname;
   if (!hostname) {
     card.hidden = true;
     return;
@@ -326,9 +335,7 @@ async function loadSiteCard() {
   const mode = ov?.value || "auto";
 
   // Update segmented control
-  $("siteSeg").querySelectorAll("button").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.mode === mode);
-  });
+  setSiteSegActive(mode);
 
   // Compute pill + reason
   const pill = $("siteStatePill");
@@ -360,67 +367,86 @@ async function loadSiteCard() {
 }
 
 async function setSiteOverride(hostname, mode) {
-  await sendMsg({ type: "set_domain_override", hostname, value: mode });
-  // Local re-render — content script will reload itself via tab message
-  await loadSiteCard();
+  if (!hostname) {
+    throw new Error("当前页面不支持站点级开关");
+  }
+  const result = await sendMsg({ type: "set_domain_override", hostname, value: mode });
+  if (result?.error) {
+    throw new Error(result.error);
+  }
+  return result;
 }
 
-$("siteSeg")?.addEventListener("click", async (e) => {
-  const btn = e.target.closest("button[data-mode]");
-  if (!btn) return;
-  const { hostname } = await getActiveTabHostname();
-  if (!hostname) return;
-  await setSiteOverride(hostname, btn.dataset.mode);
-});
+// Bind site-seg buttons individually so click reliably fires on every press.
+function bindSiteSegButtons() {
+  const seg = $("siteSeg");
+  if (!seg) return;
+  seg.querySelectorAll("button[data-mode]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (btn.disabled) return;
+
+      const hostname = currentSiteHostname || (await getActiveTabHostname()).hostname;
+      const reasonEl = $("siteReason");
+      if (!hostname) {
+        if (reasonEl) reasonEl.textContent = "当前页面不支持站点级开关";
+        return;
+      }
+
+      const mode = btn.dataset.mode;
+      setSiteSegActive(mode);
+      setSiteSegPending(true);
+      if (reasonEl) reasonEl.textContent = "保存中…";
+
+      try {
+        const r = await sendMsg({ type: "set_domain_override", hostname, value: mode });
+        if (r?.error) throw new Error(r.error);
+        if (reasonEl) reasonEl.textContent = "✓ 已保存，正在刷新页面…";
+      } catch (err) {
+        if (reasonEl) reasonEl.textContent = "保存失败：" + (err?.message || String(err));
+      } finally {
+        setSiteSegPending(false);
+      }
+    });
+  });
+}
+bindSiteSegButtons();
 
 async function loadDashboard() {
   showView("dashboard");
   setSettingsStatus("");
 
-  // Load local profile
+  // Load site state card
   await loadSiteCard();
-  await loadBackendUrl();
-  updateBackendStatus("checking");
-  const user = await sendMsg({ type: "get_user" });
-  if (user.error) {
-    updateBackendStatus("error", "后端无法连接 — 请检查服务是否启动");
-    $("statVocab").textContent = "-";
-    // Auto-open the edit panel so user can fix the URL right away
-    openBackendEditPanel(true);
-    return;
-  }
-  updateBackendStatus("ok", "后端服务正常");
-  // 词汇量先占位，等等级数据加载后同步
-  $("statVocab").textContent = user.estimated_vocabulary || "-";
 
-  // Load stats
-  const stats = await sendMsg({ type: "get_stats" });
-  if (!stats.error && stats.by_status) {
-    $("statNew").textContent = stats.by_status.new_word || 0;
-    $("statLearning").textContent = stats.by_status.learning || 0;
-    $("statMastered").textContent = stats.by_status.mastered || 0;
-    if (stats.estimated_vocabulary) {
-      $("statVocab").textContent = stats.estimated_vocabulary.toLocaleString();
-    }
-  }
-
-  // Load toggle state
+  // Toggle state
   const { enabled } = await sendMsg({ type: "get_enabled" });
   const toggle = $("enableToggle");
   toggle.classList.toggle("on", enabled);
 
-  // Load vocab level & sync vocabulary count
-  currentVocabLevel = user.vocab_level || "high_school";
+  // User profile (now from IndexedDB, no backend)
+  const user = await sendMsg({ type: "get_user" });
+  $("statVocab").textContent = user?.estimated_vocabulary || "-";
+
+  // Stats from IndexedDB
+  const stats = await sendMsg({ type: "get_stats" });
+  if (!stats?.error && stats?.by_status) {
+    $("statNew").textContent = stats.by_status.new_word || 0;
+    $("statLearning").textContent = stats.by_status.learning || 0;
+    $("statMastered").textContent = stats.by_status.mastered || 0;
+  }
+
+  // Vocab level
+  currentVocabLevel = user?.vocab_level || "high_school";
   await loadVocabLevels();
-  // 如果没有做过词汇测试，用等级对应的词汇量
-  if (!user.estimated_vocabulary) {
+  if (!user?.estimated_vocabulary) {
     const matched = vocabLevelsData.find((l) => l.key === currentVocabLevel);
     if (matched?.word_count) {
       $("statVocab").textContent = matched.word_count.toLocaleString();
     }
   }
 
-  await loadBackendUrl();
   await loadDictPacks();
   await loadTranslatorConfig();
 
@@ -436,62 +462,21 @@ async function loadDashboard() {
 // === Toggle ===
 $("enableToggle").addEventListener("click", async () => {
   const toggle = $("enableToggle");
+  const previousState = toggle.classList.contains("on");
   const newState = !toggle.classList.contains("on");
   toggle.classList.toggle("on", newState);
-  await sendMsg({ type: "set_enabled", enabled: newState });
-});
-
-// === Backend URL ===
-function openBackendEditPanel(open) {
-  const panel = $("backendEditPanel");
-  const btn = $("backendEditBtn");
-  if (!panel || !btn) return;
-  if (open) {
-    panel.hidden = false;
-    btn.classList.add("is-open");
+  toggle.style.pointerEvents = "none";
+  const result = await sendMsg({ type: "set_enabled", enabled: newState });
+  toggle.style.pointerEvents = "";
+  if (result?.error) {
+    toggle.classList.toggle("on", previousState);
+    setSettingsStatus("开关保存失败: " + result.error, true);
   } else {
-    panel.hidden = true;
-    btn.classList.remove("is-open");
-  }
-}
-
-$("backendEditBtn").addEventListener("click", () => {
-  const panel = $("backendEditPanel");
-  openBackendEditPanel(panel?.hidden);
-  if (panel && !panel.hidden) {
-    setTimeout(() => $("backendUrl")?.focus(), 50);
+    setSettingsStatus(newState ? "插件已启用" : "插件已关闭");
   }
 });
 
-async function saveBackendUrl() {
-  const url = $("backendUrl").value.trim();
-  const statusEl = $("backendStatus");
-  if (!url) return;
-
-  // Request host permission for non-localhost URLs
-  const granted = await ensureHostPermission(url);
-  if (!granted) {
-    statusEl.textContent = "需要授权访问该地址，请重试并在弹出的对话框中确认";
-    statusEl.style.color = "#e53935";
-    return;
-  }
-
-  statusEl.textContent = "保存中...";
-  statusEl.style.color = "#777";
-  await sendMsg({ type: "set_api_base", apiBase: url });
-  $("backendUrlText").textContent = url.replace(/^https?:\/\//, "");
-  statusEl.textContent = "✓ 已保存，刷新网页生效";
-  statusEl.style.color = "#0d9488";
-  // Re-probe the new backend
-  updateBackendStatus("checking", "检查新地址中…");
-  const user = await sendMsg({ type: "get_user" });
-  if (user.error) {
-    updateBackendStatus("error", "新地址无法连接");
-  } else {
-    updateBackendStatus("ok", "后端服务正常");
-  }
-}
-$("backendUrl").addEventListener("change", saveBackendUrl);
+// (Backend URL controls removed — extension is now pure frontend.)
 
 $("translatorMode").addEventListener("change", () => {
   syncTranslatorFields();

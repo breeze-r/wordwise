@@ -437,6 +437,10 @@
     transition: background 0.15s ease, color 0.15s ease;
   }
   .site-seg button:hover { background: #f1f5f9; }
+  .site-seg button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+  }
   .site-seg button.active {
     background: #0d9488;
     color: #fff;
@@ -655,19 +659,6 @@
     <div class="toggle on" id="enableToggle"></div>
   </div>
 
-  <div class="backend-bar" id="backendBar">
-    <span class="backend-dot" id="backendDot"></span>
-    <span class="backend-text" id="backendText">后端连接中…</span>
-    <span class="backend-url" id="backendUrlText"></span>
-    <button class="backend-edit" id="backendEditBtn" title="修改后端地址" aria-label="修改后端地址">
-      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-    </button>
-  </div>
-  <div class="backend-edit-panel" id="backendEditPanel" hidden>
-    <input id="backendUrl" type="text" placeholder="http://localhost:8000" autocomplete="off" />
-    <div class="section-status" id="backendStatus"></div>
-  </div>
-
   <!-- Per-site state card -->
   <div class="site-card" id="siteCard" hidden>
     <div class="site-row">
@@ -676,9 +667,9 @@
     </div>
     <div class="site-reason" id="siteReason"></div>
     <div class="site-seg" id="siteSeg">
-      <button data-mode="auto" title="智能判定 — 大多数情况选这个">自动</button>
-      <button data-mode="on" title="强制启用 — 即使页面看起来不像阅读型">总是开</button>
-      <button data-mode="off" title="完全跳过 — 节省 token">总是关</button>
+      <button type="button" data-mode="auto" title="智能判定 — 大多数情况选这个">自动</button>
+      <button type="button" data-mode="on" title="强制启用 — 即使页面看起来不像阅读型">总是开</button>
+      <button type="button" data-mode="off" title="完全跳过 — 节省 token">总是关</button>
     </div>
   </div>
 
