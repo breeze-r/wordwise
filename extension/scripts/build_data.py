@@ -132,41 +132,98 @@ for i in range(0, len(target_words), batch_size):
 
 print(f"  fetched {len(rows)} entries from ECDICT")
 
+POS_PREFIX_RE = re.compile(
+    r"^\s*(?:\[[a-z]+\]\s*)?(n|v|vt|vi|a|adj|adv|prep|conj|pron|num|art|aux|abbr|interj|s)\.\s*",
+    flags=re.IGNORECASE,
+)
+
+
+def _split_into_meanings(text: str) -> list[str]:
+    """Split a Chinese definition blob into discrete meaning strings.
+
+    ECDICT brief / meanings often look like:
+       "住址, 演说, 举止, 灵巧, 求爱\nvt. 发表(演说), 对付\n[计] 地址"
+    We split on:
+      1. literal newlines (top-level pos sections)
+      2. then commas / 、 within each section
+    Each fragment gets the leading pos tag (n., vt., [计]) stripped.
+    """
+    if not text:
+        return []
+    # First normalise: backend stored "\\n" sometimes; collapse both forms.
+    s = str(text).replace("\\n", "\n")
+    out: list[str] = []
+    seen: set[str] = set()
+    for line in s.split("\n"):
+        line = POS_PREFIX_RE.sub("", line.strip())
+        if not line:
+            continue
+        # Split on Chinese / ASCII commas — but keep parenthesised content together.
+        # Simple split is good enough for ECDICT data.
+        for chunk in re.split(r"[,，;；、]", line):
+            c = chunk.strip()
+            if not c:
+                continue
+            # Drop bracketed annotations like "[计]" left over
+            c = re.sub(r"^\[[^\]]+\]\s*", "", c).strip()
+            # Strip pos prefix that survived split (e.g., "a. 现在的")
+            c = POS_PREFIX_RE.sub("", c).strip()
+            if not c or c in seen:
+                continue
+            seen.add(c)
+            out.append(c)
+            if len(out) >= 6:
+                return out
+    return out
+
+
 dict_core: dict[str, dict] = {}
 for word, phonetic, pos, brief, meanings_json, definition_en in rows:
     w = (word or "").strip().lower()
     if not w:
         continue
     entry: dict = {}
-    # Brief is the short Chinese gloss used inline
+
+    # Build a unified list of meanings from BOTH brief and meanings_json
+    all_text = ""
     if brief:
-        b = str(brief).strip()
-        if b:
-            entry["b"] = b
-    # Meanings (parsed multi-meanings as list)
+        all_text += str(brief)
     if meanings_json:
         try:
             mlist = json.loads(meanings_json)
             if isinstance(mlist, list):
-                cleaned = []
-                for item in mlist[:4]:
-                    if isinstance(item, dict):
-                        # Items might be {"pos": "n", "meaning": "..."}
-                        meaning = item.get("meaning") or item.get("zh") or ""
-                        if meaning:
-                            cleaned.append(str(meaning).strip())
-                    elif isinstance(item, str):
-                        cleaned.append(item.strip())
-                if cleaned:
-                    entry["m"] = cleaned
+                for item in mlist:
+                    if isinstance(item, str):
+                        all_text += "\n" + item
+                    elif isinstance(item, dict):
+                        m = item.get("meaning") or item.get("zh") or ""
+                        if m:
+                            all_text += "\n" + str(m)
         except (json.JSONDecodeError, TypeError):
             pass
+
+    meanings = _split_into_meanings(all_text)
+    if meanings:
+        entry["m"] = meanings[:5]
+
+    # Inline brief: shortest 2-3 word gloss, picked from first meaning
+    if meanings:
+        # Prefer the first short meaning (≤8 chars) as the inline brief
+        for m in meanings:
+            if len(m) <= 8:
+                entry["b"] = m
+                break
+        if "b" not in entry:
+            entry["b"] = meanings[0][:8]
+
     if phonetic:
         entry["p"] = str(phonetic).strip()
     if pos:
         entry["s"] = str(pos).strip()
     if definition_en:
-        en_lines = [s.strip() for s in str(definition_en).split("\n") if s.strip()][:2]
+        # Normalize line breaks then split & take 2 sentences
+        ed = str(definition_en).replace("\\n", "\n")
+        en_lines = [s.strip() for s in ed.split("\n") if s.strip()][:3]
         if en_lines:
             entry["e"] = en_lines
     if entry:
